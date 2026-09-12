@@ -177,8 +177,13 @@ Delegate a sweep across many files, a long draft, orientation in an unfamiliar c
 matching one of agy's own skills. Keep single lookups, single edits, anything needing this
 session's context, and **verification of the result** here.
 
-A call costs ~17 300 input tokens read-only and ~44 000 for a write task, whatever the prompt — that
-is agy's own system prompt, not yours. The quota refills every five hours.
+A call costs ~17 300 input tokens before the prompt is even read — that is agy's own system prompt,
+not yours. Reading one file and answering costs ~30 000; creating one file, ~44 000. The quota
+refills every five hours.
+
+agy always runs with tools auto-approved, because headless mode cannot prompt for a permission and
+silently returns an empty answer instead. That means it can edit files on any call, which is why
+`agy-run` refuses to start on a dirty tree.
 
 agy starts each call with no memory of the conversation, so the brief carries absolute paths, the
 outcome wanted as an instruction, and explicit acceptance criteria. Long material goes in a file the
