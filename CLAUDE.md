@@ -33,8 +33,13 @@ Only harness-specific behaviour goes here; project rules stay in AGENTS.md. Each
 - **Targeted edits, not whole-file rewrites.** When the end result is the same, edit the lines
   that change; rewrite a file only when it is short or most of it changes.
   *Why: a rewrite of a long file costs output tokens and time and hides the actual diff in review.*
-- **Plan mode for `src/<critical-path>/`.** Present the plan and wait for approval before editing.
-  *Why: <e.g. this path is under CODEOWNERS; an unplanned diff there is rejected in review anyway>.*
+- **Plan mode before changing anything under `~/.claude/`.** `settings.json`, `bin/agy-run.py`, and
+  `skills/agy/SKILL.md` live outside this repository and outside its history.
+  *Why: nothing here records that they changed, and a broken `settings.json` degrades every Claude
+  Code session on this machine, not just this project.*
+- **Delegation to `agy` runs through the `agy` skill**, not an improvised `agy -p` in Bash.
+  *Why: the skill carries what a call costs and how a hung call behaves; without it the first
+  delegation is a guess made with someone's quota.*
 - **Write files with the Write and Edit tools, never with a shell heredoc.** `cat > file <<'EOF'`
   and PowerShell here-strings are not reliable here: the call fails with an unexpected-EOF parse
   error and leaves nothing written, and long content with quotes or apostrophes triggers it.

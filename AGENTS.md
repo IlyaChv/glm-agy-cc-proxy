@@ -1,11 +1,14 @@
-# <PROJECT NAME> — Agent Contract
+# agy-cc-proxy — Agent Contract
 
-Loaded into every agent session. Every line here is paid for by every session and dilutes the
-lines around it, so this file holds only what every task needs. Anything that matters to some
-sessions only lives where those sessions find it: path-scoped rules in `.claude/rules/` (loaded
-when a matching file is opened), ADRs in `docs/adr/`, a local `AGENTS.md` inside the subsystem.
-Adding a rule here means asking whether it belongs to every session — and, if it does, whether an
-older rule can go.
+Read by both agents that work here: Claude Code loads it through the `@AGENTS.md` import in
+`CLAUDE.md`, the Antigravity CLI (`agy`) reads this file directly as the workspace context file.
+One contract, two harnesses.
+
+Every line here is paid for by every session and dilutes the lines around it, so this file holds
+only what every task needs. Anything that matters to some sessions only lives where those sessions
+find it: path-scoped rules in `.claude/rules/` (loaded when a matching file is opened), ADRs in
+`docs/adr/`, a local `AGENTS.md` inside the subsystem. Adding a rule here means asking whether it
+belongs to every session — and, if it does, whether an older rule can go.
 
 Every rule states **what to do** and **why (the cost of getting it wrong)**, in calm, specific
 wording: current models over-trigger on shouted rules ("CRITICAL", "you MUST", "NEVER"), and a
@@ -46,10 +49,12 @@ rule without a why gets worked around.
    *Why: invented values pass tests and fail in production, and the failure surfaces far away from
    the code that caused it.*
 
-5. **Local CI is on you.**
-   `<check command>` must pass locally before you open an MR. A red pipeline on a fresh MR is a
-   process defect, not a CI finding.
-   *Why: shared CI is a shared resource; every red run blocks other people's feedback loop.*
+5. **The Google session file is off limits.**
+   Do not open, print, copy, or commit `~/.gemini/oauth_creds.json`, and do not build anything that
+   reads it. Authentication happens inside `agy` itself.
+   *Why: that file is the live OAuth session of a personal Google AI Pro account. Extracting it and
+   calling Google's private Cloud Code endpoint is exactly what the third-party proxy this project
+   replaced was doing, and accounts using it were banned.*
 
 6. **Green tests are not "done".**
    Done means verified against reality: the live contract, real data, the actual UI, the actual
@@ -61,8 +66,18 @@ rule without a why gets worked around.
 
 ## Scope
 
-This project does **only <X>**. We explicitly do **not** do: **<Y>, <Z>**. Do not propose,
-scaffold, or "prepare for" these — say so and stop.
+This project holds **the wiring between Claude Code and the Antigravity CLI**: the `agy-run`
+wrapper, the `agy` skill, the permission entry that lets it run unprompted, and this shared
+contract.
+
+We explicitly do **not** do: an Anthropic-API shim that puts `agy` underneath Claude Code as its
+model; `antigravity-claude-proxy` or any other tool that extracts OAuth tokens and calls Google's
+private endpoints; anything that spoofs a client version. Do not propose, scaffold, or "prepare
+for" these — say so and stop.
+
+*Why: the shim cannot work (agy executes its own tools instead of returning `tool_use` blocks, and
+every turn would cost 17k tokens of quota), and the token-extraction route gets Google accounts
+banned.*
 
 Inside scope, make the smallest change that satisfies the task: a bug fix leaves surrounding code
 as it was; a small feature gains no configurability; code you did not change gets no new comments,
@@ -78,28 +93,41 @@ slowly, and it is maintained forever.*
 
 | Purpose | Command |
 |---|---|
-| Everything (lint + types + tests) | `<check>` |
-| Run locally | `<dev>` |
-| Tests | `<test>` |
-| Format / autofix | `<fmt>` |
+| Smoke-test the link | `python C:/Users/cupik/.claude/bin/agy-run.py --dir . --prompt "reply with exactly: ok"` |
+| Available models | `agy models` |
+| Available agy agents | `agy agents` |
+| Wrapper reference | `python C:/Users/cupik/.claude/bin/agy-run.py --help` |
 
-Prefer these over ad-hoc invocations, and prefer CLI tools already installed in this repo
-(`<vcs cli>`, `jq`, `rg`) over anything else. Commands that matter only inside one area (a single
-test by name, a migration runner, a fixture generator) live in that area's rule file, not here.
+There is no build, no test suite, and no CI here — the deliverables are a Python script, a skill,
+and two JSON settings files. Verification is running the thing.
+
+Prefer CLI tools already on this machine (`git`, `rg`, `python`) over adding anything. Note that
+`jq` and PowerShell 7 (`pwsh`) are **not** installed: parse JSON with `python`, and do not write
+scripts that assume `pwsh`.
 
 ---
 
 ## Module map
 
-- `<path/to/domain>/` — all business logic lives here, and only here
-- `<path/to/app>/` — <one line>
-- `<path/to/adapters>/` — <one line>
+In this repo:
 
-<One line per module. If a module needs a paragraph, it needs its own local `AGENTS.md`.>
+- `AGENTS.md` — this contract, read by Claude Code and `agy` both
+- `CLAUDE.md` — Claude Code harness behaviour only; imports this file on its first line
+- `.claude/rules/` — path-scoped rules, loaded only when a matching file is opened
+- `docs/templates/` — task brief, ADR, memory entry
+
+Outside the repo, and just as much part of the system:
+
+- `~/.claude/bin/agy-run.py` — the wrapper; `agy-run.cmd` is a shim for typing it by hand
+- `~/.claude/skills/agy/SKILL.md` — when and how Claude Code delegates
+- `~/.claude/settings.json` — the permission entry allowing `agy-run` without a prompt
+- `~/.gemini/antigravity-cli/settings.json` — agy's own model, permissions, workspace trust
+
+Change one of the four external files and say so in the summary: they are not in this repo's
+history and nothing else records that they moved.
 
 Legacy areas with constraints of their own are listed in `.claude/rules/known-problems.md`; it
-loads itself when you open a file under one of those paths. If your harness does not load
-path-scoped rules, read it before touching `<path/to/legacy>/`.
+loads itself when you open a file under one of those paths.
 
 ---
 
@@ -109,12 +137,14 @@ path-scoped rules, read it before touching `<path/to/legacy>/`.
   after reading it, or say that you have not.
   *Why: a confident guess about an unopened file reads exactly like a fact in review, and it is
   wrong often enough to matter.*
-- **All external HTTP goes through `<wrapper>`; never a raw client.**
-  *Why: retries, timeouts, and tracing live in the wrapper. A raw call has no timeout and hangs a
-  worker until it is killed.*
-- **Types are derived from the live contract, never from prose.**
-  Fetch the actual schema (`<curl openapi.json>` / generated client) before writing types.
-  *Why: a type built from a description compiles and then mismatches the field that matters.*
+- **Every call to `agy` goes through `agy-run.py`, never `agy -p` directly.**
+  *Why: the wrapper pins the JSON output format and a timeout, reports what the call cost, and
+  refuses to auto-approve edits on a dirty tree. A raw call loses all four, and a hung one blocks
+  the session for five minutes with nothing to show.*
+- **Flags and model ids are checked against the tool, not remembered.**
+  `agy models` for model ids, `agy <subcommand> --help` for flags. Note that `-p` needs its value
+  attached (`-p=text`) and does not read stdin.
+  *Why: this CLI is on a weekly release cadence and its flags have already moved once.*
 - **New dependencies require explicit approval.**
   Propose the package, the reason, and what it replaces; do not add it yourself.
   *Why: every dependency is a permanent supply-chain, license, and upgrade obligation taken on in
@@ -130,44 +160,51 @@ path-scoped rules, read it before touching `<path/to/legacy>/`.
   follow-up in your summary, unless the requested behaviour cannot work without it.
   *Why: an unrequested fix inside a feature diff is the change nobody reviews and nobody can
   revert separately.*
-- **<Rule>** — *Why: <concrete consequence>.*
+- **A stub is not an implementation.** If you cannot implement something, leave it unimplemented and
+  say so.
+  *Why: a stub that returns a plausible value is indistinguishable from working code until it runs
+  for real.*
 
 ---
 
-## Testing rules
+## Division of labour: Claude Code and agy
 
-- **Tests verify the solution; they do not define it.** Implement the general logic for all valid
-  inputs. No values hardcoded for the test inputs, no helper scripts whose purpose is making one
-  test pass. If a test is wrong or the task is infeasible, say so instead of working around it.
-  *Why: a solution shaped to the test inputs passes CI and fails on the first real input.*
-- **A stub is not an implementation.** If you cannot implement it, leave it unimplemented and say so.
-  *Why: a stub that returns a plausible value is indistinguishable from working code until it is in
-  production.*
-- **New behaviour ships with a test that fails without the change** — sized like the neighbouring
-  test files, roughly one focused test per stated behaviour. Scratch checks used while working are
-  not turned into permanent test files.
-  *Why: a suite padded with scratch checks runs slower every day and tells nobody what the feature
-  guarantees.*
+Claude Code orchestrates on the Anthropic subscription. `agy` is a worker called for one
+self-contained job at a time on a personal Google AI Pro quota. It is never the model behind
+Claude Code.
 
-Rules for editing an existing test (what counts as weakening it, how such a change is committed)
-and the single-test command are in `.claude/rules/testing.md`, loaded when a test file is opened.
+Delegate a sweep across many files, a long draft, orientation in an unfamiliar codebase, or a task
+matching one of agy's own skills. Keep single lookups, single edits, anything needing this
+session's context, and **verification of the result** here.
+
+A call costs ~17 300 input tokens read-only and ~44 000 for a write task, whatever the prompt — that
+is agy's own system prompt, not yours. The quota refills every five hours.
+
+agy starts each call with no memory of the conversation, so the brief carries absolute paths, the
+outcome wanted as an instruction, and explicit acceptance criteria. Long material goes in a file the
+brief points at.
+
+Full procedure, flags, and failure handling: `~/.claude/skills/agy/SKILL.md`.
+
+*Why the split: delegation moves the work, never the responsibility for the result — and a task you
+could finish with one `grep` costs 17k tokens of quota to ask about.*
 
 ---
 
 ## Long tasks and session boundaries
 
-- **Progress lives on disk, not in the conversation:** freeform notes in `<progress file>`,
-  structured status in a structured file (e.g. `tests.json`), commits as checkpoints. Update them
-  before the context is compacted or the session ends.
-- **Resuming:** read the progress notes and `git log`, run `<check>` once, continue from there.
-  Do not redo verified work.
+- **Progress lives on disk, not in the conversation:** commits as checkpoints, and freeform notes
+  in `docs/progress.md` when a task spans sessions. Update them before the context is compacted or
+  the session ends.
+- **Resuming:** read `git log` and the progress notes, run the smoke-test command once, continue
+  from there. Do not redo verified work.
 - **Finish the component you are on.** The harness compacts context (Claude Code does); a long
   context is not a reason to stop early. A step you have decided on is something to run, not to
   announce: "Next, I'll…" followed by the end of the turn leaves it undone.
 - **Long deliverables are built in parts.** Create the file, then extend it section by section; a
   report-sized document gets its sections drafted separately and assembled at the end. One very
   long write can stall or drop the connection, and everything in it is lost.
-- **Remove temporary scripts and scratch files** before the MR.
+- **Remove temporary scripts and scratch files** before handing the work over.
 
 *Why: work that exists only in a transcript is lost at the next compaction, and a task abandoned
 "because the context is long" leaves a half-migrated state nobody can safely resume.*
@@ -189,36 +226,24 @@ a guess about the one thing that mattered.*
 
 ---
 
-## Architecture decisions
-
-Decisions with an expensive rollback (schema, auth, integration boundaries, storage, public
-contracts) are recorded as ADRs in `docs/adr/`, indexed in `docs/adr/ADR-INDEX.md`. The index is
-the single source of truth; its table is not copied here.
-
-**Read the subsystem's ADR before changing it. Do not reopen a recorded decision** — if it looks
-wrong, say so and stop.
-
-*Why: rediscovering why a decision was made costs more than reading it, and silently reversing it
-costs an incident.*
-
----
-
 ## Git
 
-- One task = one branch = one green MR. Branch: `agent/<short-name>`.
-- `git pull --rebase` before starting and before pushing.
+- Local-only repository, no remote. Commit on `main`; a branch only when a change is speculative
+  enough that abandoning it is likely.
 - Commits: `feat(scope): ...`, `fix(scope): ...`. Body = **what / why / how it was verified**.
-- Prefer a series of independently mergeable MRs over one large one.
-  *Why: review quality collapses with diff size, and a large MR cannot be partially reverted.*
+- Commit before delegating a write task to `agy` — the wrapper refuses on a dirty tree, and that
+  refusal is the safety net, not an obstacle to work around with `--force`.
 
 ---
 
 ## Definition of done
 
-1. `<check command>` green locally.
-2. Verified against reality: <real data / the live endpoint / the browser / the database / each role>.
-3. Commit body states what, why, and how it was verified.
-4. Exactly one MR, opened via `<mr skill/command>`, description linked to the task.
+1. The smoke-test command returns a real answer and exit code 0.
+2. Anything touched outside this repo (`~/.claude/bin/`, `~/.claude/skills/agy/`,
+   `~/.claude/settings.json`, `~/.gemini/antigravity-cli/settings.json`) is named in the summary.
+3. Claude Code still reaches `api.anthropic.com`: no `ANTHROPIC_BASE_URL` or `ANTHROPIC_AUTH_TOKEN`
+   was set anywhere.
+4. Commit body states what, why, and how it was verified.
 5. Non-goals respected — nothing outside the task's scope in the diff, no scratch files left behind.
 6. Final message states what was done, how it was verified, and what was left out or failed.
 

@@ -10,16 +10,17 @@ paths:
 # Editing tests
 
 <!--
-Deployed to .claude/rules/testing.md. Loaded when the agent opens a test file. Adjust `paths` to
-the repo's test layout. The general testing rules (tests verify the solution, stubs, one test per
-behaviour) stay in AGENTS.md because they bind implementation code too; what lives here applies
-only when a test itself is being changed.
+Loaded when the agent opens a test file. This repo has no test suite yet, so nothing below fires;
+the file is here as the shape to fill in when the first test appears. At that point: set `paths` to
+the real test layout, fill in the command table, and move the general testing rules (tests verify
+the solution, stubs, one test per behaviour) into AGENTS.md, where they bind implementation code
+too.
 -->
 
 | Purpose | Command |
 |---|---|
-| Single test by name | `<test-one "name">` |
-| Whole suite | `<test>` |
+| Single test by name | *(no test suite yet)* |
+| Whole suite | *(no test suite yet)* |
 
 - **Do not weaken a test to make it pass.** Loosening an assertion, adding a skip/xfail, widening a
   matcher, or replacing a real call with a mock in order to get green is a defect, not a fix. If the
