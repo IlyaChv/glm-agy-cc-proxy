@@ -274,6 +274,24 @@ created nothing - status SUCCESS, non-empty response, exit 0, so every check the
 passed. Re-running with an absolute path worked. Recorded in `findings.md`; the A1-12 change report
 is what makes it visible, since "nothing changed" after a write task is now printed.
 
+### Readiness check in the real project
+
+Everything up to here was tested in throwaway directories. These ran in
+`C:\Users\cupik\Desktop\agy-cc-proxy` itself, on a clean tree:
+
+- **Smoke test** (`--dir . --prompt "reply with exactly: ok"`) - returned `ok`, exit 0, tree
+  unchanged. Definition of done, item 1, satisfied against the real repo.
+- **A real file task** - asked to read `AGENTS.md` and answer from it. First attempt **failed**:
+  agy reached for a shell to locate the file and was denied. The retry with the absolute path and
+  "do not list the directory, do not search, do not run any terminal command" succeeded, and its
+  answer named `--allow-shell` - the flag added earlier the same day. So agy does read the project
+  contract, and the contract is current.
+- **The deny fence survived** every test call of the day: `read_file(*)` and all eight deny entries
+  are still in place. Only the `allowNonWorkspaceAccess` boolean is stripped, as documented.
+
+That first failure is worth keeping: on the default path a brief that leaves anything to discover
+costs a whole call to find out. `SKILL.md` now says so in "Writing the brief".
+
 ### Still open after Phase 6
 
 Every audit finding is now either fixed, closed as a non-issue, or recorded with the reason it
