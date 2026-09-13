@@ -7,6 +7,38 @@ Cross-lens agreement raises confidence, never severity.
 
 ---
 
+## NEW-1 · agy reports a task done without doing it, and the wrapper cannot tell
+- found: 2026-09-13 while verifying the A1-12 fix; not from a shard
+- severity: **Medium** · confidence: **High** (observed directly) · effort: Medium
+- evidence — the call returned exit 0 with a plausible answer:
+```
+agy-run: status=SUCCESS model=gemini-3.8-flash-high in=27862 out=1385 ... 11s
+done.
+EXIT=0
+```
+  and the working tree afterwards:
+```
+$ ls -a
+. .. .git .gitignore build local-notes.txt tracked.txt
+$ cat made.txt
+cat: made.txt: No such file or directory
+```
+- claim: the brief said to create `made.txt` with the file-writing tool. agy answered "done." and
+  created nothing. Every check the wrapper has passed: status was SUCCESS, the response was
+  non-empty, the child exited 0. Re-running with the target given as an absolute path produced the
+  file, so the trigger looks like relative-path resolution rather than a refusal - but the failure
+  mode is the point, not the cause.
+- failure: a delegated write task silently does nothing, the caller reads "done", and the work is
+  assumed complete. This is the same class as the empty-answer bug the wrapper was built to catch,
+  and it slips through because the answer is not empty.
+- fix: no reliable one from the wrapper's side - it cannot know what the brief asked for. Two
+  partial mitigations are in place: the post-run change report (A1-12) prints what actually changed
+  in `--dir`, so *nothing changed* after a write task is now visible; and `SKILL.md` says to check
+  what agy produced rather than believe the summary. Giving absolute paths in briefs avoids the
+  observed trigger.
+
+---
+
 ## Corrections the lead made to shard output
 
 **A3-1 REFUTED.** The shard claimed the allow-rule `Bash(python .../agy-run.py:*)` lets an

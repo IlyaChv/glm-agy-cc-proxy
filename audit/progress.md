@@ -176,11 +176,9 @@ class is a weaker check. Ten findings; the review was right on the ones that mat
 recommended recipe both now refuse before any call. Free to check — the refusal happens before agy
 is launched.
 
-**Caveat on the "verified" recipe (F3).** The four ARC-1 calls ran before the current settings
-state. `allowNonWorkspaceAccess` is now explicitly `false` and `trustedWorkspaces` still lists only
-agy's own bin directory (DOC-6, still deferred). Whether the recipe still succeeds against a
-project directory under that combination has **not** been re-tested. Treat it as proven under the
-conditions recorded in the report, not under today's.
+**Caveat on the "verified" recipe (F3) — since resolved.** The four ARC-1 calls ran before the
+current settings state, so the recipe was re-tested afterwards (T1, T7, T12 in Phase 4) and still
+works. DOC-6 was closed as a non-issue at the same time.
 
 ### Quota actually spent
 
@@ -253,22 +251,49 @@ and unknown-permission inputs, then end to end: a shell task on the default path
 and pointed at `--allow-shell`, and re-running with that flag returned the output and exit 0. The
 advice it gave was followed and it worked.
 
-### Still open, and why
+## Phase 6 — the four remaining findings, closed
 
-| ID | What | Why it stands |
+The human approved all four and asked for the skills archive to be deleted.
+
+**Archive deleted.** `~/.gemini/_skills-archive-2026-09-13`, 139 MB, gone. Both live skill
+directories remain absent, which is what they asked for in the earlier session.
+
+| ID | What was done | How it was verified |
 |---|---|---|
-| SEC-3 | The Bash allow-rule does not constrain `--dir` or `--prompt`, so a call can be aimed at any clean repo unprompted | The fix is an allow-listed root in the wrapper, which is a new policy. Not introduced without the human's decision |
-| SEC-5 | agy's stderr is copied into the transcript unbounded and unscrubbed | Real scrubbing is a sizeable addition to a 230-line script |
-| SEC-4 | Gitignored files are invisible to the guard and not restored by `git checkout .` | Documented in the docstring and the refusal text; actually protecting them needs a backup step before every call |
-| A1-12 | The clean-tree check is a point-in-time guarantee | Closing it needs locking or per-tool-call rechecks, out of proportion here |
+| SEC-3 | `check_dir_allowed` refuses `--dir` (and every `--add-dir`) inside `.gemini`, `.claude`, `.ssh`, `.aws`, `.gnupg`, `.config`, `.docker`, `AppData/Roaming`, `AppData/Local/Microsoft`, or the home directory itself. Not skippable with `--force`. Optional `AGY_ALLOWED_ROOTS` narrows further, off unless set | each case refused, `--force` did not bypass it, `AGY_ALLOWED_ROOTS` refused a path outside its roots, and a scratch directory under `AppData/Local/Temp` still ran |
+| SEC-4 | `warn_about_ignored` lists the gitignored paths in each working directory before the call, since `git status --porcelain` hides them and `git checkout .` will not restore them | a repo with `local-notes.txt` and `build/` ignored produced the note naming both |
+| SEC-5 | agy's stderr is capped at 4 000 chars, keeping both ends and stating how much was dropped. The denial notice is parsed from the full text first, so nothing the wrapper needs is lost | a 10 073-char input rendered to 4 051 with head, tail and the omission notice intact, and the permission still parsed |
+| A1-12 | After the run, the wrapper prints what actually changed in `--dir` and each `--add-dir`, so the point-in-time nature of the check stops being invisible | a write task reported `?? made.txt` before the usage line |
 
-Deliberately not attempted: the `~/.gemini/config/config.json` route for `command()` grants (sits
-next to credential files, and the branch it would unlock has a working alternative), and
-`--mode plan`, which the wrapper accepts but which was never exercised against agy.
+**`AppData` was almost blanket-forbidden by mistake.** Caught before it shipped: the scratchpad
+lives under `AppData/Local/Temp`, and delegating into a scratch working copy is normal. Only
+`AppData/Roaming` and `AppData/Local/Microsoft` are blocked.
 
-Not this project's to decide: `~/.gemini/_skills-archive-2026-09-13` (139 MB) still awaits the
-human's word, and pruning agy's `permissions.allow` means interactive agy sessions will prompt more
-often - restorable from `settings.json.bak-audit-2026-09-13`.
+**A new finding came out of the verification: NEW-1.** agy answered "done." to a write task and
+created nothing - status SUCCESS, non-empty response, exit 0, so every check the wrapper has
+passed. Re-running with an absolute path worked. Recorded in `findings.md`; the A1-12 change report
+is what makes it visible, since "nothing changed" after a write task is now printed.
+
+### Still open after Phase 6
+
+Every audit finding is now either fixed, closed as a non-issue, or recorded with the reason it
+stands. What remains:
+
+- **NEW-1** — agy can report a task done without doing it. No wrapper-side fix exists; the change
+  report and the "check what it produced" rule in `SKILL.md` are the mitigations.
+- **The residual half of SEC-3** — `--prompt` is still unconstrained, and always will be: the
+  permission entry matches the program path, and the brief is the whole point of the call. What
+  changed is that `--dir` can no longer be a credential store.
+- **The residual half of A1-12** — the race between the check and agy's first write is still there.
+  Only its consequences are now visible.
+- **Reads are broad on both paths.** `read_file(*)` is the only grant form that matches, so deny
+  rules are the fence. That is a property of agy, not something this project can fix.
+- **Deliberately not attempted:** the `~/.gemini/config/config.json` route for `command()` grants
+  (sits next to credential files, and the branch it would unlock has a working alternative), and
+  `--mode plan`, which the wrapper accepts but which was never exercised against agy.
+
+For the human to notice, not to fix: pruning agy's `permissions.allow` means interactive agy
+sessions prompt more often - restorable from `settings.json.bak-audit-2026-09-13`.
 
 ## Corrections to the record
 
