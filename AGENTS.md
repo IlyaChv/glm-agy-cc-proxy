@@ -118,7 +118,8 @@ In this repo:
 
 Outside the repo, and just as much part of the system:
 
-- `~/.claude/bin/agy-run.py` — the wrapper; `agy-run.cmd` is a shim for typing it by hand
+- `~/.claude/bin/agy-run.py` — the wrapper; `agy-run.cmd` is a shim for typing it by hand, not
+  allow-listed in `~/.claude/settings.json`, so it always prompts
 - `~/.claude/skills/agy/SKILL.md` — when and how Claude Code delegates
 - `~/.claude/settings.json` — the permission entry allowing `agy-run` without a prompt
 - `~/.gemini/antigravity-cli/settings.json` — agy's own model, permissions, workspace trust
@@ -233,7 +234,7 @@ a guess about the one thing that mattered.*
 
 ## Git
 
-- Local-only repository, no remote. Commit on `main`; a branch only when a change is speculative
+- Local-only repository, no remote. Commit on `master`; a branch only when a change is speculative
   enough that abandoning it is likely.
 - Commits: `feat(scope): ...`, `fix(scope): ...`. Body = **what / why / how it was verified**.
 - Commit before delegating a write task to `agy` — the wrapper refuses on a dirty tree, and that

@@ -8,8 +8,10 @@ paths:
 
 <!--
 Deployed to .claude/rules/known-problems.md. Loaded only when the agent opens a file under one of
-the paths above, so it costs nothing to the sessions that never go near legacy.
-Keep the `paths` list in sync with the table: a row whose path is not listed is never seen.
+the paths above — today the `paths` list above is a placeholder (this project has no legacy area
+yet), so this rule never fires for any file. Keep the `paths` list in sync with the table: a row
+whose path is not listed is never seen. Whoever adds the first real row must replace the
+placeholder `paths` entries in that same commit.
 One row per oddity. Owner and date are mandatory — an unowned, undated list becomes a graveyard
 nobody dares to clean up.
 -->

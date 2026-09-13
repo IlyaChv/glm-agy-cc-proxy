@@ -35,5 +35,5 @@ otherwise it lives only here and will be missed.>
 
 ---
 
-*Add a one-line row for this ADR to `docs/adr/ADR-INDEX.md`. The index is the only place the list of
-decisions is maintained.*
+*Add a one-line row for this ADR to `docs/adr/ADR-INDEX.md`, creating it if it does not exist yet.
+The index is the only place the list of decisions is maintained.*

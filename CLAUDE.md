@@ -37,7 +37,9 @@ Only harness-specific behaviour goes here; project rules stay in AGENTS.md. Each
   `skills/agy/SKILL.md` live outside this repository and outside its history.
   *Why: nothing here records that they changed, and a broken `settings.json` degrades every Claude
   Code session on this machine, not just this project.*
-- **Delegation to `agy` runs through the `agy` skill**, not an improvised `agy -p` in Bash.
+- **Delegation to `agy` runs through the `agy` skill, by convention** — not an improvised `agy -p`
+  in Bash. Nothing technical enforces this; the permission entry approves the wrapper command
+  itself whether or not the skill was loaded.
   *Why: the skill carries what a call costs and how a hung call behaves; without it the first
   delegation is a guess made with someone's quota.*
 - **Write files with the Write and Edit tools, never with a shell heredoc.** `cat > file <<'EOF'`
@@ -55,29 +57,18 @@ Only harness-specific behaviour goes here; project rules stay in AGENTS.md. Each
 
 ## Models and subagents
 
-**Delegate when any of these holds.** This is the default for such work, not an exception:
+Delegation criteria and the reasoning behind them live in `AGENTS.md`, "Delegate sweeps and
+independent tracks; do single lookups yourself" — this section adds only what is specific to
+Claude Code.
 
-- the answer needs many files read but only a conclusion returned (a sweep, an audit, "where is
-  this used", "does anything still call X");
-- independent tracks that share no state — per module, per file, per dimension, per section;
-- a long document whose sections can be drafted separately;
-- a task you would otherwise read half the repository to finish.
-
-**Do it yourself** for one lookup, one file, one edit, a step that needs the context you are
-already holding, or verification of your own work.
-
-*Why both directions: everything you read lands in this session's context and is re-sent on every
-later turn, so twenty files read here keep costing for the rest of the run and crowd the window;
-the same twenty read by a subagent are paid once and come back as a paragraph. In the other
-direction, a subagent for a single grep is a round trip that returns a summary instead of the line
-you needed.*
-
-**If tokens are burning fast and everything is happening in this session, the triggers above are
-not firing — delegate the next sweep instead of reading it here.**
+**If tokens are burning fast and everything is happening in this session, the triggers in
+`AGENTS.md` are not firing — delegate the next sweep instead of reading it here.**
 
 Spawn subagents in the background and keep working on independent parts; wait only when the next
 step needs their result. If one subagent can do the task, use one rather than several. Pass the
-model and effort per call from the table below; without them the subagent inherits this session's.
+model per call from the table below; without it the subagent inherits this session's. Effort is not
+currently settable per subagent call — the Effort column is the pairing to use once it becomes
+controllable, and applies today to work done directly in this session.
 
 Model and effort by role (revised 2026-09; names change, roles do not — see the playbook):
 
