@@ -80,9 +80,20 @@ The human approved all four groups at the Gate, including the quota-costing ARC-
 Done by the lead, directly:
 
 - **ARC-4** — `audit/` committed as `f51973e`; working tree clean, so delegation is unblocked.
-- **ARC-2** — `allowNonWorkspaceAccess` flipped `true` -> `false` in
+- **ARC-2** — `allowNonWorkspaceAccess` set to `false` in
   `~/.gemini/antigravity-cli/settings.json`. Backup: `settings.json.bak-audit-2026-09-13`.
-  JSON re-parsed after the write; all six top-level keys preserved.
+
+  **Correction, found by the review pass.** The sentence that stood here — "JSON re-parsed after
+  the write; all six top-level keys preserved" — was false. The file on disk afterwards had five
+  keys: `allowNonWorkspaceAccess` was *absent*, not `false`. The re-parse checked that the write
+  produced valid JSON, not that the value survived, and the difference is the whole point of the
+  change.
+
+  **agy rewrites this file itself.** The evidence is `command(&)` coming back as
+  `command(&)` — Go's `encoding/json` HTML escaping, which Python does not produce. A Go
+  struct field with `omitempty` drops a `false` boolean, which fits exactly. So a `false` written
+  here can be erased by the next agy run. Re-checked and set explicitly again after the
+  experiment; **re-verify it after any future agy call** rather than assuming it holds.
 
 Branch `agent/audit-contract-fixes` created off `f51973e`. Backups taken before delegating:
 `agy-run.py.bak-audit-2026-09-13`, `SKILL.md.bak-audit-2026-09-13`.
@@ -141,6 +152,46 @@ this audit found. That decision belongs to the human.
 **Still open, deliberately.** DOC-6 (`trustedWorkspaces`), SEC-2 (prune `permissions.allow`),
 ARC-3 (deny rules for credential paths). All three depend on whether the default moves to the
 narrower path; deciding them now would be a guess. SEC-3 and SEC-5 were left as recorded risks.
+
+### Review pass, and what it caught
+
+An independent review of the whole change set ran on `opus` — a deliberate departure from the
+human's "sonnet 5 high", because the writers were Sonnet agents and reviewing them with the same
+class is a weaker check. Ten findings; the review was right on the ones that mattered.
+
+| # | What it caught | Status |
+|---|---|---|
+| F1 | **`--no-tools --mode accept-edits` disabled the clean-tree guard while agy could still write** — the guard was gated on `--no-tools`, which now only withholds the blanket flag. Introduced by this change set. | fixed: the guard is gated on whether agy can write, and covers `--add-dir` too |
+| F2 | `read_file(*)` grants read of every file, including the credential file rule 5 protects | partly: deny rules added for the credential paths, **their syntax is unverified** |
+| F3 | The "verified" recipe ran under a settings state the machine no longer has | fixed: caveat added below and in `SKILL.md` |
+| F4 | `allowNonWorkspaceAccess` was absent, not `false`; the record said otherwise | fixed, see above |
+| F5 | A non-zero child exit only warned, so a crashed run still exited 0 | fixed: it now exits 1, printing the answer first |
+| F6 | On timeout, `taskkill` failure was swallowed with no `proc.kill()` fallback | fixed: fallback added, failure reported |
+| F7 | `json.loads("null")` succeeds, then `.get` raises — a traceback where the baseline gave a clean message | fixed: non-object payloads rejected with the diagnostic |
+| F8 | `--add-dir` handed agy a directory the guard never inspected | fixed: each one is checked |
+| F9 | `--no-tools`'s help and the docstring called it read-only, which it is not | fixed in both, and in `SKILL.md` |
+| F10 | The file had been converted to CRLF, breaking the shebang and hiding the real diff | fixed: back to LF |
+
+**F1 verified by running it.** Against a dirty repository, `--no-tools --mode accept-edits` and the
+recommended recipe both now refuse before any call. Free to check — the refusal happens before agy
+is launched.
+
+**Caveat on the "verified" recipe (F3).** The four ARC-1 calls ran before the current settings
+state. `allowNonWorkspaceAccess` is now explicitly `false` and `trustedWorkspaces` still lists only
+agy's own bin directory (DOC-6, still deferred). Whether the recipe still succeeds against a
+project directory under that combination has **not** been re-tested. Treat it as proven under the
+conditions recorded in the report, not under today's.
+
+### Quota actually spent
+
+Six calls, not four. **~163 451 input tokens.**
+
+The four ARC-1 calls were planned and approved: 21 101 + 34 913 + 54 426 + 18 218 = 128 658.
+
+Two more, ~17 400 each, were **wasted by carelessness**: while checking the F1 fix across four flag
+combinations, two of them correctly did not trigger the guard, so the placeholder prompt `x` went
+through to a real call. A prompt guaranteed to fail before launch would have cost nothing. Recorded
+rather than quietly folded into the total.
 
 ## Corrections to the record
 
