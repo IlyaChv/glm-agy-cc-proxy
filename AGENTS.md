@@ -182,15 +182,21 @@ A call costs ~17 300 input tokens before the prompt is even read — that is agy
 not yours. Reading one file and answering costs ~30 000; creating one file, ~44 000. The quota
 refills every five hours.
 
-By default agy runs with tools auto-approved, because headless mode cannot prompt for a permission
-and the wrapper sees only the empty answer that follows. That means it can edit files on any call,
-which is why `agy-run` refuses to start on a dirty tree. The denial itself is not silent: agy names
-the missing permission on stderr, and the wrapper does not yet read that line.
+By default agy runs with edits auto-approved and shell commands still gated (`--mode accept-edits
+--sandbox`). Measured on 2026-09-13: under it agy could not write outside the workspace, and
+`agy-run` still refuses to start on a dirty tree so anything it does inside is revertible.
 
-For file work there is a narrower path, verified on this machine on 2026-09-13:
-`--no-skip-permissions --mode accept-edits --sandbox`, which auto-approves edits, keeps shell
-commands gated, and confines filesystem and network. Prefer it when the task is reading and editing
-files; it does not cover tasks that need a shell. Recipe and limits: `SKILL.md`.
+`--allow-shell` is the exception, and it is a real one: it hands agy a terminal and removes every
+other boundary. In the same test it wrote into a directory outside `--dir` that was not a git
+repository, with nothing to revert. Use it only when the task needs a shell, and say so in the
+summary. Reads are broad on both paths - deny rules in agy's settings are what fence them, and
+those do work.
+
+*Why it is opt-in rather than the default: `command()` grants are ignored in headless mode, so
+there is no narrower way to allow a shell. The choice is all or nothing, and nothing is the safer
+default.*
+
+Recipe, flags, and the full measurement: `SKILL.md`.
 
 agy starts each call with no memory of the conversation, so the brief carries absolute paths, the
 outcome wanted as an instruction, and explicit acceptance criteria. Long material goes in a file the

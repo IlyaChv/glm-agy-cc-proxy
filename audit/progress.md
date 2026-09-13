@@ -193,6 +193,49 @@ combinations, two of them correctly did not trigger the guard, so the placeholde
 through to a real call. A prompt guaranteed to fail before launch would have cost nothing. Recorded
 rather than quietly folded into the total.
 
+## Phase 4 — full verification battery (quota limit lifted by the human)
+
+15 more calls, ~539 000 input tokens. Everything below is measured, not inferred.
+Full table in `AUDIT_REPORT.md` section 6.
+
+**Settled, and it changed the design:**
+
+- The wrapper's **default is now `--mode accept-edits --sandbox` with permissions enforced.** Under
+  it agy cannot write outside the workspace (T10). The old behaviour is now the explicit
+  `--allow-shell`, which in the same test wrote to a non-git directory on the Desktop with nothing
+  to revert (T11). `--no-skip-permissions` and the experimental `--sandbox` flag are gone: the
+  first is the default, the second is on by default with `--no-sandbox` to turn it off.
+- **`deny` rules work and outrank allow** (T2). Credential paths are enumerated in agy's settings,
+  and that is now a mechanism behind AGENTS.md rule 5, not a policy line. ARC-3 closed.
+- **`command()` grants are never consulted in headless**, plain or `regex:` (T4, T5). Shell work has
+  no narrower path than `--allow-shell`. This settles the disputed half of ARC-1.
+- **The read grant cannot be narrowed.** `read_file(*)` is the only form that matches; path-scoped,
+  bare-prefix and `regex:` all fail (T3a/b/c). Reads are broad by necessity, fenced only by deny.
+  SEC-2 resolved as far as it can be: the allow list is pruned to nine narrow `command()` entries
+  plus `read_file(*)`, and the five invocation-mechanism entries are gone.
+- **`allowNonWorkspaceAccess` cannot be persisted** (T7 reproduced it): agy rewrites its settings
+  file and drops the boolean on every run. ARC-2's fix is not durable and the setting is not the
+  boundary. Documented rather than fought.
+- **`--add-dir` is a real spelling and the new guard covers it** (T6): a dirty additional directory
+  is refused before any call.
+
+**Corrections I had to make to my own earlier conclusions:**
+
+- I reported T9 as "SEC-1 confirmed in the worst way" when agy wrote outside the workspace. That
+  test was invalid - the target sat under `Temp`, which agy's sandbox documentation explicitly
+  permits. T10 with a target outside temp was refused. Said so to the human immediately rather
+  than letting the wrong conclusion stand.
+- I previously left the default unchanged for lack of evidence about both branches. T10 and T11
+  supplied it, so the decision was reversed on the evidence.
+
+**DOC-6 (`trustedWorkspaces`) closed as a non-issue.** T1, T6, T7 and T12 all succeeded with it
+still listing only agy's bin directory, so it gates nothing on the delegation path. Left alone
+rather than changed on a guess about interactive sessions.
+
+**Still not done, deliberately:** the `~/.gemini/config/config.json` route for `command()` grants.
+It sits next to credential files and the branch it would unlock already has a working alternative.
+A risk decision, not a quota one.
+
 ## Corrections to the record
 
 - The hand-over summary of the build session said the three commits were on `main`. They are on
