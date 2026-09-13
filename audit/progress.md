@@ -236,6 +236,40 @@ rather than changed on a guess about interactive sessions.
 It sits next to credential files and the branch it would unlock already has a working alternative.
 A risk decision, not a quota one.
 
+## Phase 5 — the last open improvement
+
+Merged to `master` (fast-forward, six commits) on the human's instruction.
+
+**The wrapper now reads agy's denial notice instead of guessing.** It was passing the `jetski:`
+line through while printing its own generic paragraph next to it - the one place where it knew
+less than it had been told. It now extracts the permission name and gives the fix for that one:
+`command` -> `--allow-shell`, `write_file` -> the target is outside the workspace, `read_file` ->
+a grant is missing or deny blocked it, `escalate_admin` -> a command tried to leave the sandbox.
+Unknown names are still extracted and fall back to generic advice; when no name is present the
+message says so rather than offering advice that does not apply.
+
+Verified offline against all four notices collected during the audit plus empty, absent, unrelated
+and unknown-permission inputs, then end to end: a shell task on the default path named `command`
+and pointed at `--allow-shell`, and re-running with that flag returned the output and exit 0. The
+advice it gave was followed and it worked.
+
+### Still open, and why
+
+| ID | What | Why it stands |
+|---|---|---|
+| SEC-3 | The Bash allow-rule does not constrain `--dir` or `--prompt`, so a call can be aimed at any clean repo unprompted | The fix is an allow-listed root in the wrapper, which is a new policy. Not introduced without the human's decision |
+| SEC-5 | agy's stderr is copied into the transcript unbounded and unscrubbed | Real scrubbing is a sizeable addition to a 230-line script |
+| SEC-4 | Gitignored files are invisible to the guard and not restored by `git checkout .` | Documented in the docstring and the refusal text; actually protecting them needs a backup step before every call |
+| A1-12 | The clean-tree check is a point-in-time guarantee | Closing it needs locking or per-tool-call rechecks, out of proportion here |
+
+Deliberately not attempted: the `~/.gemini/config/config.json` route for `command()` grants (sits
+next to credential files, and the branch it would unlock has a working alternative), and
+`--mode plan`, which the wrapper accepts but which was never exercised against agy.
+
+Not this project's to decide: `~/.gemini/_skills-archive-2026-09-13` (139 MB) still awaits the
+human's word, and pruning agy's `permissions.allow` means interactive agy sessions will prompt more
+often - restorable from `settings.json.bak-audit-2026-09-13`.
+
 ## Corrections to the record
 
 - The hand-over summary of the build session said the three commits were on `main`. They are on
