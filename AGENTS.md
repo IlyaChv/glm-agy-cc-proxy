@@ -127,7 +127,10 @@ Outside the repo, and just as much part of the system:
 - `~/.claude/bin/agy-run.py` — the wrapper; `agy-run.cmd` is a shim for typing it by hand, not
   allow-listed in `~/.claude/settings.json`, so it always prompts
 - `~/.claude/skills/agy/SKILL.md` — when and how Claude Code delegates
-- `~/.claude/settings.json` — the permission entry allowing `agy-run` without a prompt
+- `~/.claude/settings.json` — the permission entries allowing the two workers to run without a
+  prompt: `agy-run` by absolute path, `glm-run` as `Bash(python GLM/glm-run.py:*)` so it also
+  matches from a worktree. Neither entry constrains any argument, which is why both wrappers
+  check `--dir` themselves
 - `~/.gemini/antigravity-cli/settings.json` — agy's own model, permissions, workspace trust
 
 Change one of the four external files and say so in the summary: they are not in this repo's
