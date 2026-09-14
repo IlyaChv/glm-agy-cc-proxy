@@ -115,6 +115,8 @@ In this repo:
 - `CLAUDE.md` — Claude Code harness behaviour only; imports this file on its first line
 - `.claude/rules/` — path-scoped rules, loaded only when a matching file is opened
 - `docs/templates/` — task brief, ADR, memory entry
+- `GLM/` — switcher between the official Anthropic endpoint and Z.AI GLM; merges its keys into
+  `~/.claude/settings.json` rather than replacing the file, so the `agy-run` permission survives
 
 Outside the repo, and just as much part of the system:
 
@@ -260,7 +262,10 @@ a guess about the one thing that mattered.*
 2. Anything touched outside this repo (`~/.claude/bin/`, `~/.claude/skills/agy/`,
    `~/.claude/settings.json`, `~/.gemini/antigravity-cli/settings.json`) is named in the summary.
 3. Claude Code still reaches `api.anthropic.com`: no `ANTHROPIC_BASE_URL` or `ANTHROPIC_AUTH_TOKEN`
-   was set anywhere.
+   was set anywhere. Single exception: `GLM/switch-claude.ps1`, which switches Claude Code to the
+   Z.AI GLM endpoint on demand. It is not the agy shim — Z.AI is a paid Anthropic-compatible API,
+   no OAuth session is extracted — and it only ever writes those variables when the human picks the
+   option in its menu. Do not remove it or move it out of the repo.
 4. Commit body states what, why, and how it was verified.
 5. Non-goals respected — nothing outside the task's scope in the diff, no scratch files left behind.
 6. Final message states what was done, how it was verified, and what was left out or failed.
