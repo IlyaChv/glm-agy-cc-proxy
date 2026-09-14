@@ -66,9 +66,9 @@ rule without a why gets worked around.
 
 ## Scope
 
-This project holds **the wiring between Claude Code and the Antigravity CLI**: the `agy-run`
-wrapper, the `agy` skill, the permission entry that lets it run unprompted, and this shared
-contract.
+This project holds **the wiring between Claude Code and the workers it delegates to**: the
+`agy-run` and `glm-run` wrappers, the `agy` skill, the permission entries that let them run
+unprompted, and this shared contract.
 
 We explicitly do **not** do: an Anthropic-API shim that puts `agy` underneath Claude Code as its
 model; `antigravity-claude-proxy` or any other tool that extracts OAuth tokens and calls Google's
@@ -147,10 +147,12 @@ loads itself when you open a file under one of those paths.
   after reading it, or say that you have not.
   *Why: a confident guess about an unopened file reads exactly like a fact in review, and it is
   wrong often enough to matter.*
-- **Every call to `agy` goes through `agy-run.py`, never `agy -p` directly.**
-  *Why: the wrapper pins the JSON output format and a timeout, reports what the call cost, and
+- **Every call to a worker goes through its wrapper** — `agy-run.py`, never `agy -p`; `glm-run.py`,
+  never `claude --print`.
+  *Why: a wrapper pins the JSON output format and a timeout, reports what the call cost, and
   refuses to auto-approve edits on a dirty tree. A raw call loses all four, and a hung one blocks
-  the session for five minutes with nothing to show.*
+  the session with nothing to show. `glm-run.py` additionally keeps the Z.AI key out of argv and
+  the endpoint out of `settings.json`, neither of which a hand-written call would do.*
 - **Flags and model ids are checked against the tool, not remembered.**
   `agy models` for model ids, `agy <subcommand> --help` for flags. Note that `-p` needs its value
   attached (`-p=text`) and does not read stdin.
@@ -177,19 +179,37 @@ loads itself when you open a file under one of those paths.
 
 ---
 
-## Division of labour: Claude Code and agy
+## Division of labour: Claude Code and its two workers
 
-Claude Code orchestrates on the Anthropic subscription. `agy` is a worker called for one
-self-contained job at a time on a personal Google AI Pro quota. It is never the model behind
-Claude Code.
+Claude Code orchestrates on the Anthropic subscription and keeps the judgement — what to do, and
+whether the result is right. Two workers execute, each on its own quota, each for one
+self-contained job at a time. Neither is ever the model behind Claude Code.
 
-Delegate a sweep across many files, a long draft, orientation in an unfamiliar codebase, or a task
-matching one of agy's own skills. Keep single lookups, single edits, anything needing this
-session's context, and **verification of the result** here.
+- **GLM** — `GLM/glm-run.py`, on the Z.AI quota. The default worker for ordinary execution:
+  sweeps, implementation of an approved plan, mechanical passes. It is Claude Code itself in a
+  child process, so it reads this contract and behaves like a session you would recognise.
+- **agy** — `~/.claude/bin/agy-run.py`, on a personal Google AI Pro quota. For work whose
+  deliverable is an artifact, and for tasks matching one of agy's own skills. Call it from a thin
+  `sonnet` subagent rather than from the lead, so its long answer never enters the lead's context.
+
+Choose GLM unless the job wants agy's own skills, or unless GLM's quota is the one you would
+rather not spend right now. agy's is the scarcer of the two — see the cost note below.
+
+Keep here either way: single lookups, single edits, anything needing this session's context, and
+**verification of the result**, which runs on `fable` or `opus` and never on whatever produced the
+thing being checked.
+
+Full routing table, and why the haiku slot must not be repointed: `CLAUDE.md`, "Models and
+subagents".
 
 A call costs ~17 300 input tokens before the prompt is even read — that is agy's own system prompt,
 not yours. Reading one file and answering costs ~30 000; creating one file, ~44 000. The quota
 refills every five hours.
+
+GLM is cheaper per call at both ends, measured 2026-09-15: ~18 000 input tokens as the floor for a
+call with tools, ~36 000 to create one file, and ~7 400 for a `--no-tools` reasoning prompt. Its
+`total_cost_usd` is not a Z.AI charge — Claude Code prices it from a table with no GLM entry — so
+compare calls by tokens. Details and the rest of the measurements: `GLM/README.md`.
 
 By default agy runs with edits auto-approved and shell commands still gated (`--mode accept-edits
 --sandbox`). Measured on 2026-09-13: under it agy could not write outside the workspace, and

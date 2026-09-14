@@ -42,6 +42,11 @@ Only harness-specific behaviour goes here; project rules stay in AGENTS.md. Each
   itself whether or not the skill was loaded.
   *Why: the skill carries what a call costs and how a hung call behaves; without it the first
   delegation is a guess made with someone's quota.*
+- **GLM has no skill yet**, so read `GLM/README.md` before the first `glm-run.py` call of a
+  session — it carries the same things the `agy` skill does: the recipe, the measured costs, and
+  the flags that change the safety posture.
+  *Why: the routing table makes GLM the default worker, which means the un-skilled path is now the
+  one taken most often.*
 - **Write files with the Write and Edit tools, never with a shell heredoc.** `cat > file <<'EOF'`
   and PowerShell here-strings are not reliable here: the call fails with an unexpected-EOF parse
   error and leaves nothing written, and long content with quotes or apostrophes triggers it.
@@ -70,21 +75,46 @@ model per call from the table below; without it the subagent inherits this sessi
 currently settable per subagent call — the Effort column is the pairing to use once it becomes
 controllable, and applies today to work done directly in this session.
 
-Model and effort by role (revised 2026-09; names change, roles do not — see the playbook):
+Routing, set 2026-09-15. Two axes, and they are not interchangeable: a **subagent model** is
+picked from `fable | opus | sonnet | haiku`, while **a worker** is a separate process reached
+through a wrapper in Bash. GLM has no subagent form — `model: "glm"` matches nothing.
 
-| Role | Model | Effort | Why this pairing |
-|---|---|---|---|
-| Lead: design, plans, briefs, consolidation, final review | `fable` (Fable 5.1) | `high`; `xhigh` only where measured | Strongest reasoning. At `xhigh`/`max` it drafts long deliverables twice (in thinking, then in the reply) — keep reports and briefs at `high`. |
-| Implementation of an approved plan | `sonnet` (Sonnet 5) | `high`; `xhigh` for hard multi-file work | Follows the plan literally and precisely. At `low`/`medium` it scopes narrowly and can under-think — raise effort, do not prompt around it. |
-| Code review, line-level finding shards | `opus` (Opus 5) | `medium` fast pass; `high` thorough | Review precision and recall hold at lower effort. Ask it to report everything with confidence and severity; filter in a separate step — "only high-severity" makes it under-report. |
-| Mechanical: grep sweeps, manifest diffs, classification, extraction | `sonnet` (Sonnet 5) | `low`/`medium` | Strict effort scoping is a feature here. Evaluate `fable` at `low` as a replacement: often cheaper per task while scoring higher. |
-| Research with search or retrieval | `fable` (Fable 5.1) | `medium`/`high`, not `low` | At `low` Fable 5.1 answers from memory instead of searching. |
-| Adversarial verifier of another agent's findings | `fable` (Fable 5.1) | `high` | Writer and verifier are different agents, ideally different models. |
-| Drafting one section of a long deliverable | `sonnet` (Sonnet 5) | `medium` | Rendering settled material into a section is mechanical; parallel sections keep any single write short. |
+| Work | Runs on | Invoked as |
+|---|---|---|
+| Lead: design, plans, briefs, consolidation, final review | `fable`, or `opus` where the task is hard enough to earn it | this session, or `Agent(model:)` |
+| Re-verification, adversarial check of any result | `fable` or `opus`, never the model that produced the result | `Agent(model:)` |
+| Execution whose deliverable is an artifact | `agy`, with a thin `sonnet` subagent as its driver | `Agent(model:"sonnet")` → `agy-run.py` |
+| Every other executable task | GLM | `python GLM/glm-run.py` from a checkout root |
+| Harness service calls (auto mode's command classifier, and the like) | the haiku slot | not yours to route — see below |
 
-Model aliases are the harness's (`fable`, `opus`, `sonnet`); full IDs if a tool requires them:
-`claude-fable-5-1`, `claude-opus-5`, `claude-sonnet-5`. Nothing below Sonnet-class: rechecking a
-weaker model's routine output costs more than the routine.
+`sonnet` appears exactly once, on purpose: it assembles the brief, calls `agy-run.py`, collects
+the artifact and returns a summary. It is the cheapest thing that can keep a long agy answer out
+of the lead's context. It does not design, implement or review — that work goes to GLM or to the
+lead.
+*Why not call agy straight from the lead: agy's answer then lands in this session's context and is
+re-sent on every later turn, which is the cost delegation exists to avoid.*
+
+GLM is the default for ordinary execution, filling the slot an opus-tier worker would otherwise
+hold. That is a routing decision, not a measured equivalence — nothing here has benchmarked GLM
+against Opus 5, and this sentence should be replaced with a number the day someone does.
+*Why say so: a line that reads like a benchmark result gets quoted as one.*
+
+**Do not repoint the haiku slot.** It is not a role you assign; the harness calls it for its own
+service work, including auto mode's command-safety classifier. Measured in this session on
+2026-09-15: with `ANTHROPIC_DEFAULT_HAIKU_MODEL` set to a GLM id, a child process's stderr carried
+`{"model":"glm-5.3-flash[1m]","query_source":"agent_classifier"}`. When that slot points at a
+model the session cannot reach, running commands stops working while file reads carry on.
+*Why this one is worth a paragraph: it does not present as a model problem. It looks like Bash is
+broken, and the cause is one env var set earlier in a file that is read once at session start —
+so the session that has it cannot fix itself by editing the file.*
+
+Effort is not settable per subagent call today; it applies to work done directly in this session.
+Use `high` for lead work and re-verification, and raise it rather than re-prompt when the output
+comes back thin.
+
+Model aliases are the harness's (`fable`, `opus`, `sonnet`, `haiku`); full IDs if a tool requires
+them: `claude-fable-5-1`, `claude-opus-5`, `claude-sonnet-5`. GLM is not an alias here at all — it
+is `glm-5.3[1m]`, reachable only through `glm-run.py`.
 
 Hard caps live outside the prompt: `CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH` and
 `CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS` (Claude Code 2.1.217+) in the project environment. Set them
@@ -100,8 +130,6 @@ Per-model notes (delete when not running that model):
   On delegation it can sit at either extreme, so tune to what you actually see: spawning agents
   for trivia means the damping above is too weak, while doing every sweep in-session means the
   triggers are not firing and any leftover "delegate sparingly" wording should go.
-- Sonnet 5 as lead: it does not generalise an instruction from one item to the next; state scope
-  ("apply this to every section"). Remove "summarise after every N tool calls" scaffolding.
 - Fable 5.1 as lead: keep the progress-text line above; remove any "hold findings for the final
   response" line. Ask "are there any bugs in this program?" rather than "does it compile?" —
   the latter phrasing triggers safeguard false positives.
