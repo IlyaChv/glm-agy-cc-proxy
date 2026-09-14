@@ -1,0 +1,92 @@
+{
+  "_README": "Routing parameters for this project: who does which kind of work. CLAUDE.md points here instead of repeating the table, so this file is the one place to change it. Copy it into another project and edit the values there - per-project routing is the reason it is data and not prose. Nothing parses this automatically; the agent reads it, so keep the strings meant for a reader.",
+  "version": 1,
+  "updated": "2026-09-15",
+
+  "axes": {
+    "_note": "Two different things that look alike. A subagent model is picked from the Agent tool's enum. A worker is a separate process reached through a wrapper in Bash. GLM has no subagent form - model: 'glm' matches nothing.",
+    "subagent_models": ["fable", "opus", "sonnet", "haiku"],
+    "workers": ["glm", "agy"]
+  },
+
+  "roles": {
+    "lead": {
+      "covers": "design, plans, briefs, consolidation, final review",
+      "kind": "model",
+      "model": "fable",
+      "escalate_to": "opus",
+      "escalate_when": "the task is hard enough to earn it",
+      "effort": "high",
+      "invoke": "this session, or Agent(model:)"
+    },
+    "verify": {
+      "covers": "re-verification and adversarial checks of any result",
+      "kind": "model",
+      "model": "fable",
+      "also_allowed": ["opus"],
+      "constraint": "never the model that produced the result being checked",
+      "effort": "high",
+      "invoke": "Agent(model:)"
+    },
+    "artifact_execution": {
+      "covers": "execution whose deliverable is an artifact, and tasks matching agy's own skills",
+      "kind": "worker",
+      "worker": "agy",
+      "driver_model": "sonnet",
+      "why_driver": "a thin subagent holds agy's long answer out of the lead's context, where it would otherwise be re-sent on every later turn",
+      "invoke": "Agent(model:\"sonnet\") -> agy-run.py"
+    },
+    "execution": {
+      "covers": "every other executable task: sweeps across files, implementing an approved plan, mechanical passes, long drafts",
+      "kind": "worker",
+      "worker": "glm",
+      "invoke": "python GLM/glm-run.py"
+    }
+  },
+
+  "workers": {
+    "glm": {
+      "command": "python GLM/glm-run.py",
+      "run_from": "a checkout root - the permission entry is matched against the command text, not the file on disk",
+      "model": "glm-5.3[1m]",
+      "quota": "Z.AI",
+      "skill": ".claude/skills/glm/SKILL.md",
+      "cost_tokens": {
+        "_note": "input plus cache-read, measured 2026-09-15",
+        "no_tools": 7400,
+        "tools_floor": 17800,
+        "create_one_file": 35800,
+        "large_multifile_task": null
+      },
+      "cost_caveat": "large_multifile_task is null because it has not been measured. Do not borrow agy's multiplier. total_cost_usd in the wrapper's report is not a Z.AI charge - Claude Code prices it from a table with no GLM entry."
+    },
+    "agy": {
+      "command": "python C:/Users/cupik/.claude/bin/agy-run.py",
+      "quota": "personal Google AI Pro, refills every five hours",
+      "skill": "~/.claude/skills/agy/SKILL.md",
+      "cost_tokens": {
+        "_note": "measured 2026-09-13",
+        "floor": 17300,
+        "read_one_file": 30000,
+        "create_one_file": 44000,
+        "large_multifile_task": 116000
+      }
+    }
+  },
+
+  "choose_between_workers": "GLM unless the job wants agy's own skills, or unless GLM's quota is the one you would rather not spend right now. agy's is the scarcer of the two.",
+
+  "reserved": {
+    "haiku": {
+      "assignable": false,
+      "what": "the harness's own service slot - auto mode's command-safety classifier, and similar background calls",
+      "do_not": "repoint ANTHROPIC_DEFAULT_HAIKU_MODEL",
+      "why": "when that slot names a model the session cannot reach, running commands stops working while file reads carry on. The session holding the bad value cannot fix itself, because settings are read once at startup.",
+      "see": "CLAUDE.md, 'Models and subagents'"
+    }
+  },
+
+  "unverified": {
+    "glm_is_opus_tier": "GLM fills the slot an opus-tier worker would otherwise hold. That is a routing decision, not a measured equivalence - nothing here has benchmarked GLM against Opus 5. Replace this entry with a number the day someone does."
+  }
+}

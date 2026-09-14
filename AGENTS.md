@@ -114,6 +114,10 @@ In this repo:
 
 - `AGENTS.md` — this contract, read by Claude Code and `agy` both
 - `CLAUDE.md` — Claude Code harness behaviour only; imports this file on its first line
+- `.claude/routing.json` — which kind of work goes to which model or worker. Parameters, so that
+  each project can carry its own; edit this rather than any prose table
+- `.claude/skills/glm/` — the `glm` skill: how to delegate to the GLM worker. Project-scoped
+  because `glm-run.py` is reached by a repo-relative path
 - `.claude/rules/` — path-scoped rules, loaded only when a matching file is opened
 - `docs/templates/` — task brief, ADR, memory entry
 - `GLM/` — two separate things, see its README. `switch-claude.ps1` switches Claude Code itself to
@@ -199,8 +203,9 @@ Keep here either way: single lookups, single edits, anything needing this sessio
 **verification of the result**, which runs on `fable` or `opus` and never on whatever produced the
 thing being checked.
 
-Full routing table, and why the haiku slot must not be repointed: `CLAUDE.md`, "Models and
-subagents".
+Which role runs on what, as editable parameters: `.claude/routing.json`. Why the haiku slot must
+not be repointed, and the two axes that file distinguishes: `CLAUDE.md`, "Models and subagents".
+How to actually write a GLM call: the `glm` skill in `.claude/skills/glm/`.
 
 A call costs ~17 300 input tokens before the prompt is even read — that is agy's own system prompt,
 not yours. Reading one file and answering costs ~30 000; creating one file, ~44 000. The quota

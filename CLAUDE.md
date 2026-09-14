@@ -42,11 +42,11 @@ Only harness-specific behaviour goes here; project rules stay in AGENTS.md. Each
   itself whether or not the skill was loaded.
   *Why: the skill carries what a call costs and how a hung call behaves; without it the first
   delegation is a guess made with someone's quota.*
-- **GLM has no skill yet**, so read `GLM/README.md` before the first `glm-run.py` call of a
-  session — it carries the same things the `agy` skill does: the recipe, the measured costs, and
-  the flags that change the safety posture.
-  *Why: the routing table makes GLM the default worker, which means the un-skilled path is now the
-  one taken most often.*
+- **Delegation to GLM runs through the `glm` skill**, in `.claude/skills/glm/` — a project skill,
+  not a user-level one, because `glm-run.py` is reached by a repo-relative path and its permission
+  entry is written the same way. `GLM/README.md` holds the measurements behind it.
+  *Why it is scoped to this project: a user-level skill would point at `GLM/glm-run.py` in every
+  other repository too, where that path is nothing.*
 - **Write files with the Write and Edit tools, never with a shell heredoc.** `cat > file <<'EOF'`
   and PowerShell here-strings are not reliable here: the call fails with an unexpected-EOF parse
   error and leaves nothing written, and long content with quotes or apostrophes triggers it.
@@ -75,29 +75,16 @@ model per call from the table below; without it the subagent inherits this sessi
 currently settable per subagent call — the Effort column is the pairing to use once it becomes
 controllable, and applies today to work done directly in this session.
 
-Routing, set 2026-09-15. Two axes, and they are not interchangeable: a **subagent model** is
-picked from `fable | opus | sonnet | haiku`, while **a worker** is a separate process reached
-through a wrapper in Bash. GLM has no subagent form — `model: "glm"` matches nothing.
+**Routing — which kind of work goes to which model or worker — lives in `.claude/routing.json`,
+not here.** Read it before the first delegation of a session. It is also the file to edit when the
+split should change, and the file to copy into another project that needs a different one.
+*Why it is data rather than a table in this file: routing is a per-project decision, while this
+file is a shared contract. A table here gets quietly rewritten by whoever needs a different answer
+today, and the change lands on every project at once.*
 
-| Work | Runs on | Invoked as |
-|---|---|---|
-| Lead: design, plans, briefs, consolidation, final review | `fable`, or `opus` where the task is hard enough to earn it | this session, or `Agent(model:)` |
-| Re-verification, adversarial check of any result | `fable` or `opus`, never the model that produced the result | `Agent(model:)` |
-| Execution whose deliverable is an artifact | `agy`, with a thin `sonnet` subagent as its driver | `Agent(model:"sonnet")` → `agy-run.py` |
-| Every other executable task | GLM | `python GLM/glm-run.py` from a checkout root |
-| Harness service calls (auto mode's command classifier, and the like) | the haiku slot | not yours to route — see below |
-
-`sonnet` appears exactly once, on purpose: it assembles the brief, calls `agy-run.py`, collects
-the artifact and returns a summary. It is the cheapest thing that can keep a long agy answer out
-of the lead's context. It does not design, implement or review — that work goes to GLM or to the
-lead.
-*Why not call agy straight from the lead: agy's answer then lands in this session's context and is
-re-sent on every later turn, which is the cost delegation exists to avoid.*
-
-GLM is the default for ordinary execution, filling the slot an opus-tier worker would otherwise
-hold. That is a routing decision, not a measured equivalence — nothing here has benchmarked GLM
-against Opus 5, and this sentence should be replaced with a number the day someone does.
-*Why say so: a line that reads like a benchmark result gets quoted as one.*
+Two axes live in there, and they are not interchangeable: a **subagent model** is picked from
+`fable | opus | sonnet | haiku`, while **a worker** is a separate process reached through a wrapper
+in Bash. GLM has no subagent form — `model: "glm"` matches nothing.
 
 **Do not repoint the haiku slot.** It is not a role you assign; the harness calls it for its own
 service work, including auto mode's command-safety classifier. Measured in this session on
