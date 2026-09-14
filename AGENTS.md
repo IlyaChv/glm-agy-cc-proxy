@@ -94,6 +94,7 @@ slowly, and it is maintained forever.*
 | Purpose | Command |
 |---|---|
 | Smoke-test the link | `python C:/Users/cupik/.claude/bin/agy-run.py --dir . --prompt "reply with exactly: ok"` |
+| Smoke-test the GLM worker | `python GLM/glm-run.py --no-tools --prompt "reply with exactly: ok"` |
 | Available models | `agy models` |
 | Available agy agents | `agy agents` |
 | Wrapper reference | `python C:/Users/cupik/.claude/bin/agy-run.py --help` |
@@ -115,8 +116,11 @@ In this repo:
 - `CLAUDE.md` — Claude Code harness behaviour only; imports this file on its first line
 - `.claude/rules/` — path-scoped rules, loaded only when a matching file is opened
 - `docs/templates/` — task brief, ADR, memory entry
-- `GLM/` — switcher between the official Anthropic endpoint and Z.AI GLM; merges its keys into
-  `~/.claude/settings.json` rather than replacing the file, so the `agy-run` permission survives
+- `GLM/` — two separate things, see its README. `switch-claude.ps1` switches Claude Code itself to
+  Z.AI by editing `~/.claude/settings.json` (merging its keys, so the `agy-run` permission
+  survives). `GLM/glm-run.py` instead delegates one task to a GLM worker in a child process and
+  never touches `settings.json` — the same contract as `agy-run.py`, a second worker on a second
+  quota
 
 Outside the repo, and just as much part of the system:
 
