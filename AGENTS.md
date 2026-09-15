@@ -94,7 +94,7 @@ slowly, and it is maintained forever.*
 | Purpose | Command |
 |---|---|
 | Smoke-test the link | `python C:/Users/cupik/.claude/bin/agy-run.py --dir . --prompt "reply with exactly: ok"` |
-| Smoke-test the GLM worker | `python GLM/glm-run.py --no-tools --prompt "reply with exactly: ok"` |
+| Smoke-test the GLM worker | `python C:/Users/cupik/Desktop/agy-cc-proxy/GLM/glm-run.py --no-tools --prompt "reply with exactly: ok"` |
 | Available models | `agy models` |
 | Available agy agents | `agy agents` |
 | Wrapper reference | `python C:/Users/cupik/.claude/bin/agy-run.py --help` |
@@ -116,8 +116,9 @@ In this repo:
 - `CLAUDE.md` — Claude Code harness behaviour only; imports this file on its first line
 - `.claude/routing.json` — which kind of work goes to which model or worker. Parameters, so that
   each project can carry its own; edit this rather than any prose table
-- `.claude/skills/glm/` — the `glm` skill: how to delegate to the GLM worker. Project-scoped
-  because `glm-run.py` is reached by a repo-relative path
+- `.claude/skills/glm/` — the `glm` skill: how to delegate to the GLM worker. This directory is
+  the source; `~/.claude/skills/glm` is a junction to it, which is what makes the skill load in
+  every project. Edit it here, never through the junction path
 - `.claude/rules/` — path-scoped rules, loaded only when a matching file is opened
 - `docs/adr/` — architectural decisions; `ADR-INDEX.md` is the only maintained list of them
 - `docs/templates/` — task brief, ADR, memory entry
@@ -125,21 +126,25 @@ In this repo:
   Z.AI by editing `~/.claude/settings.json` (merging its keys, so the `agy-run` permission
   survives). `GLM/glm-run.py` instead delegates one task to a GLM worker in a child process and
   never touches `settings.json` — the same contract as `agy-run.py`, a second worker on a second
-  quota
+  quota. Called by its absolute path from any project; it stays in this repo so its history does
 
 Outside the repo, and just as much part of the system:
 
 - `~/.claude/bin/agy-run.py` — the wrapper; `agy-run.cmd` is a shim for typing it by hand, not
   allow-listed in `~/.claude/settings.json`, so it always prompts
 - `~/.claude/skills/agy/SKILL.md` — when and how Claude Code delegates
+- `~/.claude/skills/glm` — a junction to `.claude/skills/glm/` here, not a file of its own. It is
+  what makes the `glm` skill load in every project; the content is versioned in this repo
 - `~/.claude/settings.json` — the permission entries allowing the two workers to run without a
-  prompt: `agy-run` by absolute path, `glm-run` as `Bash(python GLM/glm-run.py:*)` so it also
-  matches from a worktree. Neither entry constrains any argument, which is why both wrappers
-  check `--dir` themselves
+  prompt, both by absolute path: `Bash(python C:/Users/cupik/.claude/bin/agy-run.py:*)` and
+  `Bash(python C:/Users/cupik/Desktop/agy-cc-proxy/GLM/glm-run.py:*)`. An entry is matched
+  against the command text, so a call has to be spelled exactly that way. Neither entry
+  constrains any argument, which is why both wrappers check `--dir` themselves
 - `~/.gemini/antigravity-cli/settings.json` — agy's own model, permissions, workspace trust
 
 Change one of the four external files and say so in the summary: they are not in this repo's
-history and nothing else records that they moved.
+history and nothing else records that they moved. The junction is the exception — its content
+is this repo's — but say so if you re-point or remove it.
 
 Legacy areas with constraints of their own are listed in `.claude/rules/known-problems.md`; it
 loads itself when you open a file under one of those paths.
@@ -190,7 +195,8 @@ Claude Code orchestrates on the Anthropic subscription and keeps the judgement �
 whether the result is right. Two workers execute, each on its own quota, each for one
 self-contained job at a time. Neither is ever the model behind Claude Code.
 
-- **GLM** — `GLM/glm-run.py`, on the Z.AI quota. The default worker for ordinary execution:
+- **GLM** — `GLM/glm-run.py` in this repo, called by absolute path from any project, on the Z.AI
+  quota. The default worker for ordinary execution:
   sweeps, implementation of an approved plan, mechanical passes. It is Claude Code itself in a
   child process, so it reads this contract and behaves like a session you would recognise.
 - **agy** — `~/.claude/bin/agy-run.py`, on a personal Google AI Pro quota. For work whose

@@ -1,6 +1,6 @@
 ---
 name: glm
-description: Delegate a self-contained task to a GLM worker - Claude Code itself, running as a child process on the Z.AI endpoint - instead of doing it in this session. Use for execution work: a sweep across many files, implementing an approved plan, a mechanical pass, a long draft, or whenever the user asks to offload work to GLM or Z.AI. This is the default worker in this repo's routing. Not for single lookups, single edits, or verifying your own work.
+description: Delegate a self-contained task to a GLM worker - Claude Code itself, running as a child process on the Z.AI endpoint - instead of doing it in this session. Use for execution work: a sweep across many files, implementing an approved plan, a mechanical pass, a long draft, or whenever the user asks to offload work to GLM or Z.AI. Available in every project; where a project carries a routing file, this is its default execution worker. Not for single lookups, single edits, or verifying your own work.
 ---
 
 # Delegating to GLM
@@ -14,19 +14,24 @@ restate the contract.
 This session stays the orchestrator: it writes the brief, reads the result, and verifies it. GLM
 is never the model behind Claude Code - it is a worker called for one job at a time.
 
-Which work goes to GLM rather than to agy or to a model here: `.claude/routing.json`, the project's
-routing parameters. Short version - GLM unless the job wants agy's own skills.
+Which work goes to GLM rather than to agy or to a model here: `.claude/routing.json`, if the
+project has one. Short version - GLM unless the job wants agy's own skills.
 
 ## The call
 
 ```bash
-python GLM/glm-run.py --dir <workdir> --prompt "<brief>"
+python C:/Users/cupik/Desktop/agy-cc-proxy/GLM/glm-run.py --dir <workdir> --prompt "<brief>"
 ```
 
-**Run it from a checkout root.** The permission entry is `Bash(python GLM/glm-run.py:*)` and is
-matched against the command text, not the file on disk. From the main checkout or any worktree it
-matches and runs unprompted; from inside `GLM/` you would type `python glm-run.py`, which does not
-match and asks for confirmation.
+**Spell the path exactly like that, from any directory.** The permission entry is
+`Bash(python C:/Users/cupik/Desktop/agy-cc-proxy/GLM/glm-run.py:*)` and is matched against the
+command text, not the file on disk: the absolute form runs unprompted from every project, while
+`python GLM/glm-run.py` or `python glm-run.py` does not match and asks for confirmation.
+
+The wrapper lives in the `agy-cc-proxy` repository and is called from there on purpose - that is
+where its history is. This skill is the same file in both places: `~/.claude/skills/glm` is a
+junction to `.claude/skills/glm/` in that repository, so edit it there, never through the
+junction path.
 
 Long brief: write it to a file and pass `--prompt-file <path>`. There is no length ceiling to work
 around - the brief goes to the worker on stdin, not in the command line - so `--prompt-file` is
@@ -198,6 +203,7 @@ The Z.AI key lives in `~/.claude/zai_api_key.txt` and reaches the worker through
 Never pass it as an argument, never print it, never commit it - argv is readable by any process on
 this machine.
 
-Do not use `GLM/switch-claude.ps1` to set up a delegated call. It edits `~/.claude/settings.json`
+Do not use the switcher next to the wrapper (`GLM/switch-claude.ps1` in `agy-cc-proxy`) to set
+up a delegated call. It edits `~/.claude/settings.json`
 and changes the endpoint for every future session, including the desktop app's, which then breaks
 until it is switched back. The wrapper exists precisely so that one call does not do that.

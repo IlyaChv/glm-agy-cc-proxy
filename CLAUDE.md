@@ -42,11 +42,13 @@ Only harness-specific behaviour goes here; project rules stay in AGENTS.md. Each
   itself whether or not the skill was loaded.
   *Why: the skill carries what a call costs and how a hung call behaves; without it the first
   delegation is a guess made with someone's quota.*
-- **Delegation to GLM runs through the `glm` skill**, in `.claude/skills/glm/` — a project skill,
-  not a user-level one, because `glm-run.py` is reached by a repo-relative path and its permission
-  entry is written the same way. `GLM/README.md` holds the measurements behind it.
-  *Why it is scoped to this project: a user-level skill would point at `GLM/glm-run.py` in every
-  other repository too, where that path is nothing.*
+- **Delegation to GLM runs through the `glm` skill.** Its source is `.claude/skills/glm/` in this
+  repo; `~/.claude/skills/glm` is a junction to that directory, so the same skill loads in every
+  project, and the wrapper it calls is `GLM/glm-run.py` here, by absolute path. Edit the skill in
+  the repo, never through the junction. `GLM/README.md` holds the measurements behind it.
+  *Why a junction rather than a copy: a copy drifts the day the repo one changes, and nothing
+  records that the two differ. The junction has one source, and that source has git history —
+  which `~/.claude/bin/agy-run.py` does not.*
 - **Write files with the Write and Edit tools, never with a shell heredoc.** `cat > file <<'EOF'`
   and PowerShell here-strings are not reliable here: the call fails with an unexpected-EOF parse
   error and leaves nothing written, and long content with quotes or apostrophes triggers it.

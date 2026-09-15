@@ -133,17 +133,24 @@ npm install -g --allow-scripts=@anthropic-ai/claude-code @anthropic-ai/claude-co
 адрес эндпоинта для вызова решается внутри `glm-run.py`.
 
 ```
-python GLM/glm-run.py --dir . --prompt "..."
-python GLM/glm-run.py --dir . --prompt-file brief.txt --timeout-min 20
-python GLM/glm-run.py --no-tools --prompt "..."     # без инструментов, чистое рассуждение
+python C:/Users/cupik/Desktop/agy-cc-proxy/GLM/glm-run.py --dir . --prompt "..."
+python C:/Users/cupik/Desktop/agy-cc-proxy/GLM/glm-run.py --dir . --prompt-file brief.txt --timeout-min 20
+python C:/Users/cupik/Desktop/agy-cc-proxy/GLM/glm-run.py --no-tools --prompt "..."     # без инструментов, чистое рассуждение
 ```
 
-**Звать только из корня чекаута.** Разрешение в `~/.claude/settings.json` записано как
-`Bash(python GLM/glm-run.py:*)` и сверяется с текстом команды, а не с файлом на диске.
-Из корня — и главного, и любого worktree — совпадает и вопросов не задаёт (проверено
-2026-09-15 из worktree свежим процессом: команда прошла, а `python -c "print(42)"` в том же
-вызове была отклонена, так что разрешения в тот момент действительно работали). А вот изнутри
-`GLM/` вы наберёте `python glm-run.py`, текст не совпадёт, и подтверждение спросят.
+**Звать по абсолютному пути, из любого каталога.** Разрешение в `~/.claude/settings.json`
+записано как `Bash(python C:/Users/cupik/Desktop/agy-cc-proxy/GLM/glm-run.py:*)` и сверяется с
+текстом команды, а не с файлом на диске. В таком написании команда проходит без вопросов из
+любого проекта; `python GLM/glm-run.py` из корня или `python glm-run.py` изнутри `GLM/` тексту
+не соответствуют, и подтверждение спросят. Сам скрипт остаётся в этом репозитории — здесь его
+история; в `~/.claude/bin/` его копии нет намеренно.
+
+До 2026-09-15 запись была относительной, `Bash(python GLM/glm-run.py:*)`, и работала только из
+корня чекаута. Что сверка идёт по тексту команды, проверено тогда из worktree свежим процессом:
+команда прошла, а `python -c "print(42)"` в том же вызове была отклонена.
+
+Скилл `glm` виден во всех проектах через junction `~/.claude/skills/glm` → `.claude/skills/glm`
+этого репозитория. Правится только здесь.
 
 Контракт тот же, что у `~/.claude/bin/agy-run.py`: один бриф внутрь, один ответ в stdout,
 стоимость вызова в stderr, `exit 0` только при успехе. Отличия вынуждены самим инструментом:

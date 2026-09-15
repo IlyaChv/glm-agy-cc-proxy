@@ -40,17 +40,17 @@
       "covers": "every other executable task: sweeps across files, implementing an approved plan, mechanical passes, long drafts",
       "kind": "worker",
       "worker": "glm",
-      "invoke": "python GLM/glm-run.py"
+      "invoke": "python C:/Users/cupik/Desktop/agy-cc-proxy/GLM/glm-run.py"
     }
   },
 
   "workers": {
     "glm": {
-      "command": "python GLM/glm-run.py",
-      "run_from": "a checkout root - the permission entry is matched against the command text, not the file on disk",
+      "command": "python C:/Users/cupik/Desktop/agy-cc-proxy/GLM/glm-run.py",
+      "run_from": "any directory, with the command spelled exactly as above - the permission entry is matched against the command text, not the file on disk. The wrapper stays in the agy-cc-proxy repository so its history does",
       "model": "glm-5.3[1m]",
       "quota": "Z.AI",
-      "skill": ".claude/skills/glm/SKILL.md",
+      "skill": "~/.claude/skills/glm/SKILL.md - a junction to .claude/skills/glm/ in agy-cc-proxy, which is where to edit it",
       "cost_tokens": {
         "_note": "input plus cache-read, measured 2026-09-15",
         "no_tools": 7400,
