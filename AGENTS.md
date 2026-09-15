@@ -48,13 +48,12 @@ rule without a why gets worked around.
 
 4. **Missing data is a stop-and-ask condition, not a modelling exercise.**
    When an API response, ID, schema, metric, sample value, access, or contract is missing, say so
-   and ask. Do not fabricate "representative" values to keep moving.
+   and ask. Do not fabricate "representative" values to keep moving. Where nobody can answer — a
+   worker call, a subagent's single reply — state in the final answer exactly what was missing
+   ("I do not have enough information to do X: <what>"), do the parts that do not depend on it,
+   and stop; an answer that names the gap is the deliverable, a filled-in guess is a defect.
    *Why: invented values pass tests and fail in production, and the failure surfaces far away from
    the code that caused it.*
-   Where nobody can answer — a worker call, a subagent's single reply — state in the final answer
-   exactly what was missing ('I do not have enough information to do X: <what>'), do the parts that
-   do not depend on it, and stop; an answer that names the gap is the deliverable, a filled-in guess
-   is a defect.
 
 5. **The Google session file is off limits.**
    Do not open, print, copy, or commit `~/.gemini/oauth_creds.json`, and do not build anything that
@@ -66,6 +65,8 @@ rule without a why gets worked around.
 6. **A successful call is not "done".**
    Done means the wrapper was run against the real endpoint and the output was read — a passing
    smoke test on a mocked path proves nothing.
+   *Why: the failure modes here are an endpoint, a quota or a permission entry, none of which a
+   mock exercises; the first real call after a "done" is where they surface.*
 
 ---
 
