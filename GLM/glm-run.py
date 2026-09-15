@@ -217,9 +217,44 @@ def check_dir_allowed(work_dir):
             "project, not at everything you own."
         )
 
+    # Neither C:\ nor C:\Users is a git repository, so the clean-tree guard
+    # normally refuses them for a different reason - but --force and
+    # --no-tools skip that guard, and this one is the floor no flag lifts.
+    # A drive root or any ancestor of home hands the worker every forbidden
+    # directory at once.
+    parents = []
+    parent = os.path.dirname(home)
+    while parent and parent != os.path.dirname(parent):
+        parents.append(parent)
+        parent = os.path.dirname(parent)
+    if os.path.splitdrive(real)[1] in ("", os.sep) or real in parents:
+        sys.exit(
+            "glm-run: refused, --dir is a drive root or a parent of the home "
+            "directory. Point it at a project, not at everything on the machine."
+        )
+
+    # realpath maps neither a UNC administrative share (\\localhost\C$\...)
+    # nor a subst-mapped drive onto the drive-letter form, so a forbidden
+    # directory spelled that way walks past the comparison below. Refuse any
+    # UNC path outright rather than try to canonicalise it.
+    if os.path.normcase(real).startswith("\\\\"):
+        sys.exit("glm-run: refused, --dir is a UNC path; use the drive-letter form.")
+
+    home_drive = os.path.splitdrive(home)[0]
     for rel in FORBIDDEN_SUBPATHS:
         forbidden = os.path.realpath(os.path.join(home, *rel.split("/")))
-        if real == forbidden or real.startswith(forbidden + os.sep):
+        inside = real == forbidden or real.startswith(forbidden + os.sep)
+        if not inside and os.path.splitdrive(real)[0] != home_drive:
+            # A subst drive gives the same directory a different drive
+            # letter, which the string comparison misses. samefile sees
+            # through it; it raises when either path does not exist - a
+            # refused directory can be gone - so swallow that and keep
+            # looking.
+            try:
+                inside = os.path.samefile(real, forbidden)
+            except OSError:
+                pass
+        if inside:
             sys.exit(
                 "glm-run: refused, --dir is inside {}, which holds credentials or "
                 "agent configuration.\n         No delegated task needs to work "
@@ -518,6 +553,43 @@ def echo_stderr(err):
     )
 
 
+def parse_payload(raw):
+    """The last complete JSON object in the worker's stdout, or None.
+
+    The worker's stdout can carry banners or progress lines around the
+    payload, so anchoring on the first brace anywhere would start the parse
+    mid-diagnostic. Try the whole stdout first, then each line that begins
+    with `{` once leading whitespace is skipped, from the last such line to
+    the first, and accept only an object that runs to the end of the stream.
+    Leading noise is tolerated only if the payload starts on its own line;
+    trailing text after the object makes the parse fail by design, so a
+    truncated or mixed stream is not mistaken for a payload. The scan is
+    linear in the number of lines, not in the number of braces.
+    """
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError:
+        pass
+    decoder = json.JSONDecoder()
+    # Decode at the `{` itself rather than at the line start, so an indented
+    # payload line (`   {"a": 1}`) still parses.
+    starts = []
+    offset = 0
+    for line in raw.splitlines(keepends=True):
+        stripped = line.lstrip()
+        if stripped.startswith("{"):
+            starts.append(offset + (len(line) - len(stripped)))
+        offset += len(line)
+    for start in reversed(starts):
+        try:
+            obj, end = decoder.raw_decode(raw, start)
+        except ValueError:
+            continue
+        if isinstance(obj, dict) and not raw[end:].strip():
+            return obj
+    return None
+
+
 def run(cmd, work_dir, prompt, key, args, extra_dirs, guarded):
     # The brief goes in on stdin. `claude --print` reads it there when no
     # positional prompt is given, which means no command-line length ceiling, no
@@ -559,20 +631,13 @@ def run(cmd, work_dir, prompt, key, args, extra_dirs, guarded):
                 proc.returncode, BASE_URL
             )
         )
-    try:
-        payload = json.loads(raw)
-    except json.JSONDecodeError:
-        start = raw.find("{")
-        if start == -1:
-            sys.exit(
-                "glm-run: the worker returned no JSON (exit {}).\n{}".format(
-                    proc.returncode, raw[:2000]
-                )
+    payload = parse_payload(raw)
+    if payload is None:
+        sys.exit(
+            "glm-run: the worker returned no parseable JSON object (exit {}).\n{}".format(
+                proc.returncode, raw[:2000]
             )
-        try:
-            payload = json.loads(raw[start:])
-        except json.JSONDecodeError as exc:
-            sys.exit("glm-run: cannot parse the worker's output ({}):\n{}".format(exc, raw[:2000]))
+        )
 
     # `null`, a list or a bare number all parse as valid JSON, and every field
     # read below would raise on them. Fail with the diagnostic instead.

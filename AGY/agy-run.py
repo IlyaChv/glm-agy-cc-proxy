@@ -168,9 +168,27 @@ def git(args, cwd):
 def forbidden_subpath(real):
     """The FORBIDDEN_SUBPATHS entry `real` sits inside (or equals), or None."""
     home = os.path.abspath(os.path.expanduser("~"))
+    # realpath maps neither a UNC administrative share (\\localhost\C$\...)
+    # nor a subst-mapped drive onto the drive-letter form, so a forbidden
+    # directory spelled that way walks past the comparison below. Refuse any
+    # UNC path outright rather than try to canonicalise it.
+    if os.path.normcase(real).startswith("\\\\"):
+        sys.exit("agy-run: refused, --dir is a UNC path; use the drive-letter form.")
+    home_drive = os.path.splitdrive(home)[0]
     for rel in FORBIDDEN_SUBPATHS:
         forbidden = os.path.realpath(os.path.join(home, *rel.split("/")))
-        if real == forbidden or real.startswith(forbidden + os.sep):
+        inside = real == forbidden or real.startswith(forbidden + os.sep)
+        if not inside and os.path.splitdrive(real)[0] != home_drive:
+            # A subst drive gives the same directory a different drive
+            # letter, which the string comparison misses. samefile sees
+            # through it; it raises when either path does not exist - a
+            # refused directory can be gone - so swallow that and keep
+            # looking.
+            try:
+                inside = os.path.samefile(real, forbidden)
+            except OSError:
+                pass
+        if inside:
             return rel
     return None
 
@@ -208,6 +226,22 @@ def check_dir_allowed(work_dir):
         sys.exit(
             "agy-run: refused, --dir is the home directory itself. Point it at a "
             "project, not at everything you own."
+        )
+
+    # Neither C:\ nor C:\Users is a git repository, so the clean-tree guard
+    # normally refuses them for a different reason - but --force and
+    # --no-tools skip that guard, and this one is the floor no flag lifts.
+    # A drive root or any ancestor of home hands the worker every forbidden
+    # directory at once.
+    parents = []
+    parent = os.path.dirname(home)
+    while parent and parent != os.path.dirname(parent):
+        parents.append(parent)
+        parent = os.path.dirname(parent)
+    if os.path.splitdrive(real)[1] in ("", os.sep) or real in parents:
+        sys.exit(
+            "agy-run: refused, --dir is a drive root or a parent of the home "
+            "directory. Point it at a project, not at everything on the machine."
         )
 
     rel = forbidden_subpath(real)
@@ -382,19 +416,30 @@ def parse_payload(raw):
 
     agy is on a weekly release cadence and may print banners or progress
     lines around the payload, so anchoring on the first brace anywhere would
-    start the parse mid-diagnostic. Try the whole stdout first, then walk the
-    brace positions from the end and accept only an object that runs to the
-    end of the stream - which is where agy flushes its result. This tolerates
-    leading noise only: trailing text after the JSON object makes the parse
-    fail by design, so a truncated or mixed stream is not mistaken for a
-    payload.
+    start the parse mid-diagnostic. Try the whole stdout first, then each
+    line that begins with `{` once leading whitespace is skipped, from the
+    last such line to the first, and accept only an object that runs to the
+    end of the stream - which is where agy flushes its result. Leading noise
+    is tolerated only if the payload starts on its own line; trailing text
+    after the object makes the parse fail by design, so a truncated or mixed
+    stream is not mistaken for a payload. The scan is linear in the number
+    of lines, not in the number of braces.
     """
     try:
         return json.loads(raw)
     except json.JSONDecodeError:
         pass
     decoder = json.JSONDecoder()
-    for start in reversed([m.start() for m in re.finditer(r"\{", raw)]):
+    # Decode at the `{` itself rather than at the line start, so an indented
+    # payload line (`   {"a": 1}`) still parses.
+    starts = []
+    offset = 0
+    for line in raw.splitlines(keepends=True):
+        stripped = line.lstrip()
+        if stripped.startswith("{"):
+            starts.append(offset + (len(line) - len(stripped)))
+        offset += len(line)
+    for start in reversed(starts):
         try:
             obj, end = decoder.raw_decode(raw, start)
         except ValueError:
