@@ -173,7 +173,9 @@ def forbidden_subpath(real):
     # directory spelled that way walks past the comparison below. Refuse any
     # UNC path outright rather than try to canonicalise it.
     if os.path.normcase(real).startswith("\\\\"):
-        sys.exit("agy-run: refused, --dir is a UNC path; use the drive-letter form.")
+        sys.exit(
+            "agy-run: refused, {} is a UNC path; use the drive-letter form.".format(real)
+        )
     home_drive = os.path.splitdrive(home)[0]
     for rel in FORBIDDEN_SUBPATHS:
         forbidden = os.path.realpath(os.path.join(home, *rel.split("/")))
