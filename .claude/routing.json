@@ -11,8 +11,8 @@
   },
 
   "axes": {
-    "_note": "Two mechanisms that look alike and are not interchangeable. A subagent is started with the Agent tool and picks a model from the harness enum; it can receive the lead's context in its prompt and runs in parallel with others. A worker is a separate process reached through a wrapper in Bash; it starts blank on every call, cannot be talked to, and returns one answer. GLM has no subagent form - model: 'glm' matches nothing. agy has no subagent form either.",
-    "subagent_models": ["fable", "opus", "sonnet", "haiku"],
+    "_note": "Two mechanisms that look alike and are not interchangeable. A subagent is started with the Agent tool and picks a model from the harness enum; it can receive the lead's context in its prompt and runs in parallel with others. A worker is a separate process reached through a wrapper in Bash; it starts blank on every call, cannot be talked to, and returns one answer. GLM has no subagent form - model: 'glm' matches nothing. agy has no subagent form either. Haiku is not a pickable subagent model - it is the harness's reserved slot, see 'reserved'.",
+    "subagent_models": ["fable", "opus", "sonnet"],
     "workers": ["glm", "agy"]
   },
 
@@ -69,7 +69,7 @@
       "kind": "subagent",
       "agent_types": ["implementer", "sweeper", "drafter"],
       "model": "sonnet",
-      "effort": "see each role's frontmatter",
+      "effort": "implementer high, sweeper medium, drafter low (authoritative value in each role's frontmatter); low only for the mechanical render the drafter does - anywhere judgement is needed, a scoped-down result at low effort looks complete",
       "why_not_glm": "GLM starts blank and needs a clean tree; these tasks need neither the ceremony nor the isolation",
       "invoke": "Agent(subagent_type: <role>)"
     },
@@ -81,19 +81,20 @@
       "model": "sonnet",
       "effort": "medium",
       "worker": "agy",
-      "boundary": "agy never edits the project's working tree. Its --dir is a side directory the driver prepares (a fresh git repository with the inputs copied in and committed, since the wrapper requires a clean git checkout). The driver returns the artifact's path and a three-line summary; bringing it into the project is the lead's decision, made as an ordinary edit.",
+      "boundary": "agy never edits the project's working tree. Its --dir is a side directory the driver prepares (a fresh git repository with the inputs copied in and committed, since the wrapper requires a clean git checkout). The driver checks that the artifact exists on disk and returns its path with a four-line report; bringing it into the project is the lead's decision, made as an ordinary edit.",
+      "acceptance": "the lead spot-checks three cited claims against their sources before bringing a research artifact in",
       "why_sonnet": "the driver has nothing to judge here - it prepares the side directory, calls once, and relays a path",
       "invoke": "Agent(subagent_type: \"agy-driver\") -> python C:/Users/cupik/.claude/bin/agy-run.py"
     },
 
     "verify": {
-      "covers": "re-verification and adversarial checks of a finding before it reaches a report",
+      "covers": "cross-model adversarial re-check of a finding produced by a different model, only when a finding is contested or a report goes to a human; never a re-check of the caller's own work",
       "kind": "subagent",
       "agent_type": "verifier",
       "model": "fable",
       "also_allowed": ["opus"],
       "constraint": "never the model that produced the thing being checked; for a finding written by fable, call with model: opus",
-      "effort": "high",
+      "effort": "medium",
       "note": "not run on every delegation. A glm-driver's check is verification enough for routine execution; the lead reads the diff when it decides to."
     },
 
@@ -102,7 +103,8 @@
       "kind": "subagent",
       "agent_type": "reviewer",
       "model": "opus",
-      "effort": "medium fast pass, high thorough"
+      "effort": "medium fast pass, high thorough",
+      "finding_stage": "the reviewer reports every issue including uncertain and low-severity ones, with confidence and severity per finding; filtering happens in the verify stage, never in the finding stage"
     },
 
     "research": {
@@ -129,7 +131,7 @@
   "parallel": {
     "execution": "worktree-only",
     "rule": "Two GLM calls in one checkout collide: the second refuses on the first's dirty tree, or the drivers revert each other. Run parallel glm-drivers only with `isolation: worktree` in the Agent tool, one worktree and one branch per driver; the lead merges afterwards. Inside one checkout, one driver at a time.",
-    "ceiling": "CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS in the project environment; no other limit"
+    "ceiling": "the CLAUDE_CODE_MAX_* subagent variables in the project environment, listed in CLAUDE.md, plus the SDK's max_budget_usd"
   },
 
   "workers": {
@@ -181,7 +183,7 @@
     "haiku": {
       "assignable": false,
       "what": "the harness's own service slot - auto mode's command-safety classifier, and similar background calls",
-      "do_not": "repoint ANTHROPIC_DEFAULT_HAIKU_MODEL",
+      "leave_as_installed": "ANTHROPIC_DEFAULT_HAIKU_MODEL keeps the harness's own default; it is set by the installation, not by a routing decision",
       "why": "when that slot names a model the session cannot reach, running commands stops working while file reads carry on. The session holding the bad value cannot fix itself, because settings are read once at startup.",
       "see": "CLAUDE.md, 'Models and subagents'"
     }

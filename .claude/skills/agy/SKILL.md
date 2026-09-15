@@ -135,7 +135,17 @@ agy starts with no memory of this conversation. The brief carries everything:
 - the outcome wanted, phrased as an instruction ("rewrite", "list", "fix") - ask for suggestions
   and you get suggestions;
 - explicit acceptance criteria;
-- long material (logs, specs, excerpts) in a file that the brief points to, not pasted inline.
+- long material (logs, specs, excerpts) in a file that the brief points to, not pasted inline;
+- the sentence: "If an input named here is missing or unreadable, or a criterion cannot be met, say
+  so in your answer as the first line, do what does not depend on it, and stop - do not substitute
+  a guess.";
+- for a research deliverable: "each factual claim carries its source URL and the sentence from that
+  page, verbatim, and the report closes with a section 'not found / uncertain' - a claim you could
+  not source is listed there, not stated as fact.";
+- when the brief points at long material: "Before you start, quote the lines from <file> that the
+  task depends on, verbatim, in a `<quotes>` block; if none apply, write 'No relevant quotes found'
+  and stop. Use only that material and the files named here - where you need something not in them,
+  say so instead of supplying it from memory."
 
 The brief travels in argv and is visible in the process list to any process on this machine while
 the call runs, whether passed inline or via `--prompt-file`; nothing secret goes into a brief.
@@ -147,7 +157,27 @@ plus "do not list the directory, do not search, do not run any terminal command"
 absolute paths for every file named, and say outright that no shell is needed. The same wording
 prevents the silent no-op in Guard rails.
 
-If `--dir` holds an `AGENTS.md`, agy reads it on its own - project rules do not need repeating.
+If `--dir` holds an `AGENTS.md`, agy reads it on its own - project rules do not need repeating. A
+side directory usually holds none, so the sentences above are the only contract agy sees there.
+
+A brief for an artifact task, at the length it usually needs:
+
+<example>
+Write a report on how <library> handles retries, to
+`C:/Users/cupik/AppData/Local/Temp/agy-E/retries.md`. Use your file-writing tool, not a terminal
+command: do not list the directory, do not search, and do not run any shell command.
+
+The material is `C:/Users/cupik/AppData/Local/Temp/agy-E/input/docs.md` and the library's own
+documentation on the web. Sections: the default policy, how to change it, what it does on a
+timeout, and what it does not retry.
+
+Each factual claim carries its source URL and the sentence from that page, verbatim; close with a
+section "not found / uncertain" for anything you could not source - a claim without a source is
+listed there, not stated as fact.
+
+If an input named here is missing or unreadable, or a criterion cannot be met, say so in your
+answer as the first line, do what does not depend on it, and stop - do not substitute a guess.
+</example>
 
 ## Delegating code work
 

@@ -11,8 +11,8 @@ in, on a different model and a different quota. That has one large practical con
 reads this project's `CLAUDE.md` and `AGENTS.md` on its own**, so the brief does not have to
 restate the contract.
 
-This session stays the orchestrator: it writes the brief, reads the result, and verifies it. GLM
-is never the model behind Claude Code - it is a worker called for one job at a time.
+This session stays the orchestrator: it writes the brief and reads the result. GLM is never the
+model behind Claude Code - it is a worker called for one job at a time.
 
 Which work goes to GLM rather than to agy or to a model here: `.claude/routing.json`, if the
 project has one. Short version - GLM unless the job wants agy's own skills.
@@ -134,11 +134,37 @@ The worker starts with no memory of this conversation, so the brief carries ever
 - the outcome wanted, phrased as an instruction ("rewrite", "list", "fix") - ask for suggestions
   and you get suggestions;
 - explicit acceptance criteria, including the exact command that must pass;
-- long material (logs, specs, excerpts) in a file the brief points to, not pasted inline.
+- long material (logs, specs, excerpts) in a file the brief points to, not pasted inline;
+- the sentence: "If an input named here is missing or unreadable, or a criterion cannot be met, say
+  so in your answer as the first line, do what does not depend on it, and stop - do not substitute
+  a guess.";
+- for a sweep or an audit: "every claim in the answer carries `path:line` and the matched text,
+  verbatim; claims without one go under a final heading 'unsupported' rather than into the
+  conclusion." That heading is what the driver counts, since a conclusion has no acceptance command;
+- when the brief points at long material: "Before you start, quote the lines from <file> that the
+  task depends on, verbatim, in a `<quotes>` block; if none apply, write 'No relevant quotes found'
+  and stop. Use only that material and the files named here - where you need something not in them,
+  say so instead of supplying it from memory."
 
 What you do **not** need to restate: this project's rules. The worker is Claude Code, so it picks
 up `CLAUDE.md` and `AGENTS.md` from `--dir` the same way you did. Repeating the contract in the
 brief costs tokens and adds nothing.
+
+A brief that has all of it, at the length it usually needs:
+
+<example>
+Rewrite the three loaders in `C:/src/app/io/` (`csv.py`, `jsonl.py`, `parquet.py`) so each one
+takes an open binary stream instead of a path, and update every caller under `C:/src/app/`.
+Keep the public function names as they are.
+
+Acceptance: `python -m pytest tests/io -q` passes, and `rg -n "open\(" src/app/io` returns
+nothing. I run both after your call - do not run them and do not claim they pass.
+
+Do not touch: `C:/src/app/legacy/`, anything under `.claude/`, the lockfiles.
+
+If an input named here is missing or unreadable, or a criterion cannot be met, say so in your
+answer as the first line, do what does not depend on it, and stop - do not substitute a guess.
+</example>
 
 ## Delegating code work
 
@@ -164,15 +190,15 @@ Raise `--timeout-min` above the default 10 for multi-file work.
   context once; typing it out again costs output tokens and then rides along as input on every
   later turn. For a long deliverable, redirect stdout to a file in the session scratchpad
   (`> answer.md`; the wrapper forces UTF-8 on its own output, so non-ASCII survives the redirect),
-  hand that file to the user, and keep your message to the cost line plus a few sentences. Read
-  enough to verify it - that responsibility never moves - but checking is not reproducing.
+  hand that file to the user, and keep your message to the cost line plus a few sentences.
 - Report the cost line when a call is expensive or when two run in a row.
 - Check `git diff` in `--dir` before believing the summary: the worker may have edited files even
-  on a task phrased as a question. That is what the clean-tree requirement is for.
+  on a task phrased as a question.
 
 ## Failure modes
 
-Non-zero exit always means read the reason before acting. **Do not retry the same call unchanged.**
+Non-zero exit always means read the reason before acting: change the brief, change a flag, or do
+the work in this session - a retry of the identical call reproduces the identical failure.
 
 | What you see | What it means |
 |---|---|
@@ -206,7 +232,7 @@ The Z.AI key lives in `~/.claude/zai_api_key.txt` and reaches the worker through
 Never pass it as an argument, never print it, never commit it - argv is readable by any process on
 this machine.
 
-Do not use the switcher next to the wrapper (`GLM/switch-claude.ps1` in `agy-cc-proxy`) to set
+Do not use the switcher next to the wrapper (`GLM/switch-claude.ps1` in `glm-agy-cc-proxy`) to set
 up a delegated call. It edits `~/.claude/settings.json`
 and changes the endpoint for every future session, including the desktop app's, which then breaks
 until it is switched back. The wrapper exists precisely so that one call does not do that.

@@ -1,17 +1,16 @@
 ---
 paths:
-  - "<path/to/legacy>/**"
-  - "<path/to/other-legacy-area>/**"
+  # - "path/to/legacy-area/**"   the first real path goes here, in the commit that adds the first row
 ---
 
 # Known problems — do not touch without understanding
 
 <!--
 Deployed to .claude/rules/known-problems.md. Loaded only when the agent opens a file under one of
-the paths above — today the `paths` list above is a placeholder (this project has no legacy area
-yet), so this rule never fires for any file. Keep the `paths` list in sync with the table: a row
-whose path is not listed is never seen. Whoever adds the first real row must replace the
-placeholder `paths` entries in that same commit.
+the paths above — today there is no path and no row (this project has no legacy area yet), so this
+rule never fires for any file. Keep the `paths` list in sync with the table: a row whose path is
+not listed is never seen, so whoever adds the first row uncomments and fills the `paths` entry in
+that same commit.
 One row per oddity. Owner and date are mandatory — an unowned, undated list becomes a graveyard
 nobody dares to clean up.
 -->
@@ -21,8 +20,6 @@ that, and what breaks when it is "fixed" naively.
 
 | Area | Why it is like this / what breaks | Owner | Reviewed |
 |---|---|---|---|
-| `<legacy field X>` | `<e.g. downstream report expects the old name; renaming silently zeroes Q-reports>` | `<@name>` | `<YYYY-MM>` |
-| `<path/to/other-legacy-area>/` | `<...>` | `<@name>` | `<YYYY-MM>` |
 
 Before changing anything here: read the matching row and the ADR it points to (if any), then say
 in the task thread which row you are working around and how. If the change requires undoing what

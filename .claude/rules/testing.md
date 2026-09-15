@@ -19,8 +19,8 @@ too.
 
 | Purpose | Command |
 |---|---|
-| Single test by name | *(no test suite yet)* |
-| Whole suite | *(no test suite yet)* |
+| Single test by name | fill this in with the first test file — see the comment above |
+| Whole suite | fill this in with the first test file — see the comment above |
 
 - **Do not weaken a test to make it pass.** Loosening an assertion, adding a skip/xfail, widening a
   matcher, or replacing a real call with a mock in order to get green is a defect, not a fix. If the
