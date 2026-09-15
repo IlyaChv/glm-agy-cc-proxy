@@ -150,14 +150,22 @@
         "large_multifile_task": 296600
       },
       "cost_detail_large_task": "31 900 input + 264 800 cache-read + 17 500 output, 23 turns, 263 s, no shell. A nine-file, 210-line Python package: add a second input format to the parser, a section to the report, and tests for both. Seven files edited and one added, 14 tests to 33, every one passing on the first attempt. This is the figure to judge a delegation against.",
-      "cost_caveat": "total_cost_usd in the wrapper's report is not a Z.AI charge - Claude Code prices it from a table with no GLM entry. Compare calls by tokens."
+      "cost_caveat": "total_cost_usd in the wrapper's report is not a Z.AI charge - Claude Code prices it from a table with no GLM entry. Compare calls by tokens.",
+      "limits_observed": {
+        "_note": "measured on the first real glm-driver run, 2026-09-15",
+        "no_edits_under_dot_claude": "the worker's Edit/Write calls on paths under .claude/ (a skill file in the project) were permission-denied under the default acceptEdits posture. The driver makes those edits itself after the call; do not re-brief the worker for them.",
+        "timeout_for_multi_file": "a task touching eight files with a 641-line rewrite hit a 25-minute timeout on the first call and finished on the second (31 turns, 245 s). Split such a task, or set --timeout-min 40 and accept the wait."
+      }
     },
     "agy": {
       "what": "Google's Antigravity CLI, a separate agent with its own tools and skills, on a personal Google AI Pro account.",
       "command": "python C:/Users/cupik/.claude/bin/agy-run.py",
+      "installed_copy": "~/.claude/bin/agy-run.py - what the permission entry names and what runs",
+      "source": "glm-agy-cc-proxy/AGY/agy-run.py, the versioned original; after editing it, copy it over the installed copy",
       "permission_entry": "Bash(python C:/Users/cupik/.claude/bin/agy-run.py:*) in ~/.claude/settings.json",
       "quota": "personal Google AI Pro, refills every five hours",
-      "skill": "agy - ~/.claude/skills/agy/SKILL.md",
+      "availability_note": "2026-09-15: Antigravity reported the account ineligible in this location; the call fails before any quota is spent. Until that changes, the artifact track is unavailable and such work falls to a researcher or drafter subagent.",
+      "skill": "agy - ~/.claude/skills/agy is a junction to .claude/skills/agy/ in glm-agy-cc-proxy; edit it there",
       "cost_tokens": {
         "_note": "measured 2026-09-13",
         "floor": 17300,
