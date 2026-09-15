@@ -554,6 +554,9 @@ def main():
     exe = find_agy()
     cmd = build_cmd(exe, prompt, args, mode, sandbox, blanket)
     quoted = len(subprocess.list2cmdline(cmd))
+    # Set when the brief is handed over by path instead of inline; the
+    # CANNOT READ BRIEF check below needs the path it pointed at.
+    brief_ref = None
     if quoted > MAX_CMDLINE:
         if not args.prompt_file:
             # An inline brief is never auto-converted: converting it would
@@ -585,7 +588,12 @@ def main():
                 "under --sandbox agy may be denied reading it and return an "
                 "empty answer. Move it under --dir or pass --add-dir.\n".format(ref)
             )
-        prompt = "Read the file {} and follow the instructions in it.".format(ref)
+        brief_ref = ref
+        prompt = (
+            "Read the file {} with your file-reading tool and follow the instructions in it. "
+            "Do not list the directory, do not search, and do not run any terminal command. "
+            "If you cannot read it, reply with exactly: CANNOT READ BRIEF and nothing else."
+        ).format(ref)
         cmd = build_cmd(exe, prompt, args, mode, sandbox, blanket)
         sys.stderr.write(
             "agy-run: brief would overflow the {}-char Windows command line, "
@@ -668,6 +676,14 @@ def main():
             "agy-run: warning: output contained invalid UTF-8; some characters "
             "were replaced\n"
         )
+
+    if brief_ref is not None and response.strip() == "CANNOT READ BRIEF":
+        # The brief went by path and agy could not open it; nothing after that
+        # is an answer to it.
+        sys.stderr.write(
+            "agy-run: agy could not read the brief at {}\n".format(brief_ref)
+        )
+        return 1
 
     if proc.returncode != 0:
         # A payload can be complete and its answer still truncated if agy died

@@ -71,9 +71,8 @@ no longer mutually exclusive.
   and its hooks. Inside this repo that is wanted; pointing `--dir` at an unfamiliar repository
   means executing that repository's settings.
 - **Rollback cost:** small. Delete `GLM/glm-run.py`, the `glm` skill, the junction
-  `~/.claude/skills/glm`, and the `Bash(python C:/Users/cupik/Desktop/agy-cc-proxy/GLM/glm-run.py:*)`
-  entry in `~/.claude/settings.json`. Nothing else depends on it, and the switcher continues to
-  work.
+  `~/.claude/skills/glm`, and the `Bash(python C:/Users/cupik/.claude/bin/glm-run.py:*)` entry in
+  `~/.claude/settings.json`. Nothing else depends on it, and the switcher continues to work.
   *Amended 2026-09-15:* the entry was `Bash(python GLM/glm-run.py:*)` and the skill was
   project-scoped until that day; both went to an absolute path and a junction so the worker is
   reachable from every project. The decision above is unchanged by it.

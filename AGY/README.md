@@ -42,3 +42,20 @@ run. They are recorded here rather than fixed because no change to the wrapper c
 One more, in the same spirit: **"delegation goes through the skill" is convention only**
 (DOC-4). The permission entry approves the wrapper command whether or not the skill was
 loaded, and from any session — nothing technical enforces the skill-first order.
+
+## Installed copies and junctions
+
+Outside this repo, and just as much part of the system:
+
+- `~/.claude/bin/agy-run.py` — the installed copy of `AGY/agy-run.py`; every call goes to it, so
+  after editing the source here, copy it over. `agy-run.cmd` is a shim for typing the command by
+  hand — not allow-listed in `~/.claude/settings.json`, so it always prompts.
+- `~/.claude/skills/agy` — a junction to `.claude/skills/agy/` here, not a file of its own. It is
+  what makes the `agy` skill load in every project; the content is versioned in this repo and
+  edited here, never through the junction path.
+- `~/.claude/settings.json` — the permission entry
+  `Bash(python C:/Users/cupik/.claude/bin/agy-run.py:*)` that lets the wrapper run without a
+  prompt. An entry is matched against the command text, so a call has to be spelled exactly that
+  way; it constrains no argument, which is why the wrapper checks `--dir` itself.
+- `~/.gemini/antigravity-cli/settings.json` — agy's own model, permissions, workspace trust (see
+  "Known limits of the guard" above).

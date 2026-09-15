@@ -13,47 +13,56 @@ model plans better than a hand-written plan.
 
 Order matters: long material (specs, logs, contract excerpts) goes at the top, the task and the
 criteria at the bottom. Quality drops when the question is buried above a wall of data.
+
+Delete every comment block, including this one, once the brief is filled — the agent reads them
+otherwise. Sections marked "for a defect" are deleted for a feature or migration task.
 -->
 
 ## Sources of truth — read in this order
 
-1. `docs/adr/ADR-0XX.md`
+1. `<docs/adr/ADR-0XX-<slug>.md>`
 2. `<spec / contract / openapi endpoint>`
 3. `<code entry point>`
 
-Product and architecture decisions in these documents are **settled**. Do not reopen them; if one
-looks wrong, stop and say so.
+Decisions in these documents are settled (`AGENTS.md`, "Architecture decisions").
 
-<!-- Paste long excerpts here, each in its own tag, so the agent can tell material from instructions:
+<!-- Long excerpts go right here, each in its own tag, so the agent can tell material from
+instructions. Fill the block below, or delete it if the task has no long material.
+
+For a long excerpt, ask in the Task section for the relevant lines to be quoted back first (in
+<quotes> tags) before the work starts. Ready to paste into the Task section: "Before you start,
+quote the lines from <file> that the task depends on, verbatim, in a <quotes> block; if none
+apply, write 'No relevant quotes found' and stop. Use only that material and the files named here
+— where you need something not in them, say so instead of supplying it from memory." -->
 <documents>
   <document index="1">
-    <source>error.log, <timestamp>, verbatim</source>
-    <document_content>...verbatim...</document_content>
+    <source><error.log, <timestamp>, verbatim></source>
+    <document_content><...verbatim...></document_content>
   </document>
 </documents>
--->
 
 ## Task
 
 <What to do. Use the live URL, the screenshot, the verbatim error text — not a paraphrase. Ask for
 the action you want ("change", "implement", "migrate"), not for suggestions, or you will get
-suggestions.>
+suggestions. If you want more than the minimum — extra features, interactions, a fully worked
+implementation — say so in this section; it is not inferred from a short task line. Give the
+complete specification here rather than adding it turn by turn.>
 
-Exact location: `<path/to/file>:<start>-<end>`
-Hypothesis: `<where the cause almost certainly is>`
+For a defect (delete for a feature or migration):
 
-**Localise and prove the root cause before changing anything.** List the competing hypotheses,
-quote the evidence that eliminates each, state the proof for the survivor (the failing input, the
-log line, the query result), then fix.
-
-*Why: a fix applied to a guessed cause silences the symptom and leaves the bug.*
+- Exact location: `<path/to/file>:<start>-<end>`
+- Hypothesis: `<where the cause almost certainly is>`
+- **Prove the root cause before changing anything, and say what proves it** — the failing input,
+  the log line, or the query result.
+  *Why: a fix applied to a guessed cause silences the symptom and leaves the bug.*
 
 ## Expected result (optional, 1–3 real examples)
 
 <!--
 Examples steer format and structure better than descriptions. Use real material only — a response
 copied from the live contract, an existing fixture, a current log line — never an invented one
-(critical rule 4). Wrap each in <example> so it is not read as an instruction:
+(AGENTS.md rule 4). Wrap each in <example> so it is not read as an instruction:
 <examples>
   <example>
     <input>GET /v1/orders/42</input>
@@ -71,15 +80,15 @@ copied from the live contract, an existing fixture, a current log line — never
 
 - `<explicitly out of scope>`
 - `<e.g. "document only, no code" / "deployment only, do not rewrite the feature">`
-- Anything not required by the acceptance criteria above. No cleanup of surrounding code, no extra
-  configurability, no comments or types added to code you did not change.
+- Anything not required by the acceptance criteria above (the Scope rule in `AGENTS.md`).
 
 ## Access
 
-`<Narrow, explicit grant. Example: read-only production access for diagnosis; secrets come from CI
-and are never read directly.>`
+`<What this task may reach beyond the repo, narrowly. Example: read-only production access for
+diagnosis. Name the system and the level — never a credential; those come from CI or the vault.>`
 
-**Any write action, deployment, new dependency, or schema change: ask first.**
+Shared-system writes, deployments, new dependencies, schema changes: prepare, then ask
+(`AGENTS.md`, rule 2 and the dependency rule under "Development rules").
 
 ## State across sessions
 
@@ -89,12 +98,12 @@ and are never read directly.>`
 
 ## Done means
 
-- [ ] `<check command>` green locally
-- [ ] Verified against reality: `<real data / live endpoint / browser / database / each role>`
-- [ ] Non-goals respected — nothing extra in the diff, scratch files removed
-- [ ] One MR, opened via `<mr command>`, or the branch name where the repo has no remote; commit
-      body = what / why / how verified
-- [ ] Before finishing, check each acceptance criterion above and say how it was verified
+The Definition of done in `AGENTS.md` applies in full. On top of it, for this task:
+
+- [ ] Reality check specific to this task: `<the exact endpoint, dataset, screen, or role to verify
+      against — the DoD names the kind, this names the instance>`
+- [ ] Every acceptance criterion above checked, with how it was verified stated
+- [ ] `<anything this task needs that the Definition of done does not cover>`
 
 ## Open questions
 

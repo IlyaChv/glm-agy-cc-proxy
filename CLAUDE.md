@@ -33,22 +33,23 @@ Only harness-specific behaviour goes here; project rules stay in AGENTS.md. Each
 - **Targeted edits, not whole-file rewrites.** When the end result is the same, edit the lines
   that change; rewrite a file only when it is short or most of it changes.
   *Why: a rewrite of a long file costs output tokens and time and hides the actual diff in review.*
-- **Plan mode before changing anything under `~/.claude/`.** `settings.json`, `bin/agy-run.py`, and
-  `skills/agy/SKILL.md` live outside this repository and outside its history.
-  *Why: nothing here records that they changed, and a broken `settings.json` degrades every Claude
-  Code session on this machine, not just this project.*
+- **Plan mode before changing anything under `~/.claude/`** — every file there, including
+  `settings.json`, `bin/agy-run.py`, `bin/glm-run.py`, `skills/agy/`, `skills/glm/` and `agents/`.
+  *Why: they live outside this repository and outside its history, and a broken `settings.json`
+  degrades every Claude Code session on this machine, not just this project.*
 - **Write files with the Write and Edit tools, never with a shell heredoc.** `cat > file <<'EOF'`
   and PowerShell here-strings are not reliable here: the call fails with an unexpected-EOF parse
   error and leaves nothing written, and long content with quotes or apostrophes triggers it.
   *Why: the failure reads like a shell syntax problem, so the lost write is easy to miss and the
   retry costs the whole file again.*
-- **Long documents are built in parts, never in one write.** Create the file with its first
-  section, extend it with further edits; for anything report-sized, give each section to its own
-  subagent writing its own file and assemble at the end. Never print a long document into the
-  chat as well as writing it.
+- **Long documents are built in parts.** Create the file with its first section and extend it with
+  further edits; hand the reader the path rather than reprinting the document in the chat.
   *Why: one very long write can stall the turn or drop the connection, and everything in it is
   lost — including the reasoning that produced it.*
-- **Scratch files go to the session scratchpad**, not into the repo.
+- **Scratch files go to the session scratchpad**, not into the repo. Remove any temporary file you
+  create for iteration at the end of the task.
+  *Why: a scratch file in the tree ends up in the diff, and the reviewer cannot tell it from the
+  change.*
 
 ## Models and subagents
 
@@ -139,8 +140,8 @@ Per-model notes (delete when not running that model):
 
 How a worker is called — from its driver, which loads the `glm` or `agy` skill first, and why
 that is convention rather than a gate — is in AGENTS.md, "Division of labour: lead, drivers,
-workers" and "Development rules"; the module map there records the installed wrappers and the
-skill junctions.
+workers" and "Development rules"; the installed wrappers and the skill junctions are recorded in
+`GLM/README.md` and `AGY/README.md`, "Installed copies and junctions".
 
 Where a project has neither worker installed, delete the driver roles from `routing.json` rather
 than leaving a route nobody can take.
