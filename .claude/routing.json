@@ -164,7 +164,7 @@
       "source": "glm-agy-cc-proxy/AGY/agy-run.py, the versioned original; after editing it, copy it over the installed copy",
       "permission_entry": "Bash(python C:/Users/cupik/.claude/bin/agy-run.py:*) in ~/.claude/settings.json",
       "quota": "personal Google AI Pro, refills every five hours",
-      "availability_note": "2026-09-15: Antigravity reported the account ineligible in this location; the call fails before any quota is spent. Until that changes, the artifact track is unavailable and such work falls to a researcher or drafter subagent.",
+      "availability_note": "2026-09-15: one call failed with 'account is not eligible for Antigravity ... not available in your location' before spending quota; a re-check an hour later passed (status=SUCCESS, 17 400 input tokens). Treat that error as transient: retry once, and only if it repeats route the artifact work to a researcher or drafter subagent.",
       "skill": "agy - ~/.claude/skills/agy is a junction to .claude/skills/agy/ in glm-agy-cc-proxy; edit it there",
       "cost_tokens": {
         "_note": "measured 2026-09-13",
