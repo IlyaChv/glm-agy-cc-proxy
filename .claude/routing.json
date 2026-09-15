@@ -56,9 +56,10 @@
         "no_tools": 7400,
         "tools_floor": 17800,
         "create_one_file": 35800,
-        "large_multifile_task": null
+        "large_multifile_task": 296600
       },
-      "cost_caveat": "large_multifile_task is null because it has not been measured. Do not borrow agy's multiplier. total_cost_usd in the wrapper's report is not a Z.AI charge - Claude Code prices it from a table with no GLM entry."
+      "cost_detail_large_task": "31 900 input + 264 800 cache-read + 17 500 output, 23 turns, 263 s, no shell. A nine-file, 210-line Python package: add a second input format to the parser, a section to the report, and tests for both. Seven files edited and one added, 14 tests to 33, every one passing on the first attempt with no repair turn. This is the figure to judge a delegation against - roughly seventeen times the tools floor.",
+      "cost_caveat": "total_cost_usd in the wrapper's report is not a Z.AI charge - Claude Code prices it from a table with no GLM entry."
     },
     "agy": {
       "command": "python C:/Users/cupik/.claude/bin/agy-run.py",

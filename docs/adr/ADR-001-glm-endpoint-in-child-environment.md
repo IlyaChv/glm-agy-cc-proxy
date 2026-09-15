@@ -73,9 +73,13 @@ no longer mutually exclusive.
 - **Rollback cost:** small. Delete `GLM/glm-run.py`, the `glm` skill, and the
   `Bash(python GLM/glm-run.py:*)` entry in `~/.claude/settings.json`. Nothing else depends on it,
   and the switcher continues to work.
-- **Follow-ups:** a large multi-file task on GLM has not been measured, so there is no figure to
-  judge a big delegation against. The auth-failure path — an absent or wrong key — has not been
-  exercised; the wrapper's message for it is reasoned, not observed.
+- **Follow-ups:** the auth-failure path — an absent, expired or revoked key, an exhausted quota, a
+  Z.AI outage — has not been exercised; the wrapper's message for it is reasoned, not observed. It
+  needs no second key to check: one call with a deliberately wrong token in a throwaway
+  environment would settle it.
+  *Closed 2026-09-15:* a large multi-file task was measured end to end — ~296 600 input-side
+  tokens, 263 s, 14 tests to 33 passing on the first attempt. Figures in `GLM/README.md` and
+  `.claude/routing.json`.
 
 ## Rules this creates for agents
 

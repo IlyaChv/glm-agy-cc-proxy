@@ -213,7 +213,9 @@ not yours. Reading one file and answering costs ~30 000; creating one file, ~44 
 refills every five hours.
 
 GLM is cheaper per call at both ends, measured 2026-09-15: ~18 000 input tokens as the floor for a
-call with tools, ~36 000 to create one file, and ~7 400 for a `--no-tools` reasoning prompt. Its
+call with tools, ~36 000 to create one file, and ~296 600 for a real multi-file task — a nine-file
+package gaining a second input format, a report section and tests, 14 tests to 33, all passing on
+the first attempt. Judge a delegation against that last figure, not the one-file one. Its
 `total_cost_usd` is not a Z.AI charge — Claude Code prices it from a table with no GLM entry — so
 compare calls by tokens. Details and the rest of the measurements: `GLM/README.md`.
 

@@ -86,10 +86,14 @@ actually moves:
 - `--no-tools`, any prompt at all: **~7 400 tokens**. That is the system prompt and nothing else.
 - floor for a call **with tools**: **~17 800**. Tool definitions are most of the difference.
 - creating one trivial file: **~35 800**, ~12 s.
+- **a real multi-file task: ~296 600** (31 900 input + 264 800 cache-read), 17 500 output,
+  23 turns, 263 s. A nine-file, 210-line Python package: add a second input format to the parser,
+  a section to the report, and tests for both. Seven files edited, one added, 14 tests to 33, all
+  passing on the first attempt with no repair turn and no shell.
 
-**A real multi-file code task has not been measured on GLM.** agy's skill carries such a figure
-(~7x its floor); do not assume the same multiplier here. If you run a large delegation, record what
-it cost in `GLM/README.md` so the next session has a real number to judge against.
+**That last figure is the one to judge a delegation against** - roughly seventeen times the tools
+floor - not the trivial-file number above it. Note the shape of the cost: input barely moves,
+cache-read carries almost all of it, so a long task is not linear in the brief's length.
 
 **`total_cost_usd` in the report is not a Z.AI charge.** Claude Code prices it from its own table,
 which has no GLM entry - the JSON marks it `costBasis: "unknown"`. Compare calls by tokens; the
