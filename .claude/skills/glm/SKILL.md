@@ -181,6 +181,7 @@ Non-zero exit always means read the reason before acting. **Do not retry the sam
 | `did not return within Ns` | a stuck tool call, not a slow model - the worker's own request timeout is far longer. Narrow the task or raise `--timeout-min` deliberately |
 | `exited N despite reporting success` | the child died after flushing output; the answer may be truncated. Treat the run as failed |
 | `spawned N subagent(s) despite the depth cap` | the cap is not holding. Tell the user - this is a change in the tool, not a task problem |
+| denied Edit/Write on a path under `.claude/` (a skill or rule file in the project) | the default `acceptEdits` posture does not cover the project's own `.claude/` directory. Observed 2026-09-15. Make those edits from the driver after the call; do not re-brief the worker for them and do not reach for `--allow-shell` |
 
 ## Guard rails
 
