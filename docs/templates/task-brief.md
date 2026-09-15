@@ -92,8 +92,8 @@ and are never read directly.>`
 - [ ] `<check command>` green locally
 - [ ] Verified against reality: `<real data / live endpoint / browser / database / each role>`
 - [ ] Non-goals respected — nothing extra in the diff, scratch files removed
-- [ ] One MR, opened via `<mr command>`, commit body = what / why / how verified (only where the
-      project's Git section names a remote workflow; otherwise this stops at the commit)
+- [ ] One MR, opened via `<mr command>`, or the branch name where the repo has no remote; commit
+      body = what / why / how verified
 - [ ] Before finishing, check each acceptance criterion above and say how it was verified
 
 ## Open questions

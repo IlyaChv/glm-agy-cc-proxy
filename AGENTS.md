@@ -116,12 +116,18 @@ In this repo:
 - `CLAUDE.md` — Claude Code harness behaviour only; imports this file on its first line
 - `.claude/routing.json` — which kind of work goes to which model or worker. Parameters, so that
   each project can carry its own; edit this rather than any prose table
+- `.claude/skills/agy/` — the `agy` skill: how to delegate to the agy worker. This directory is
+  the source; `~/.claude/skills/agy` is a junction to it, like glm, so the skill loads in every
+  project. Edit it here, never through the junction path
 - `.claude/skills/glm/` — the `glm` skill: how to delegate to the GLM worker. This directory is
   the source; `~/.claude/skills/glm` is a junction to it, which is what makes the skill load in
   every project. Edit it here, never through the junction path
 - `.claude/rules/` — path-scoped rules, loaded only when a matching file is opened
 - `docs/adr/` — architectural decisions; `ADR-INDEX.md` is the only maintained list of them
 - `docs/templates/` — task brief, ADR, memory entry
+- `AGY/` — the versioned source of the agy wrapper (`agy-run.py`) and its README, which records
+  the guard's known limits. The call goes to the installed copy in `~/.claude/bin/`, so after
+  editing the source, copy it over — the same contract as `GLM/glm-run.py`
 - `GLM/` — two separate things, see its README. `switch-claude.ps1` switches Claude Code itself to
   Z.AI by editing `~/.claude/settings.json` (merging its keys, so the `agy-run` permission
   survives). `GLM/glm-run.py` instead delegates one task to a GLM worker in a child process and
@@ -131,9 +137,10 @@ In this repo:
 
 Outside the repo, and just as much part of the system:
 
-- `~/.claude/bin/agy-run.py` — the wrapper; `agy-run.cmd` is a shim for typing it by hand, not
-  allow-listed in `~/.claude/settings.json`, so it always prompts
-- `~/.claude/skills/agy/SKILL.md` — when and how Claude Code delegates
+- `~/.claude/bin/agy-run.py` — the installed copy of `AGY/agy-run.py`; `agy-run.cmd` is a shim
+  for typing it by hand, not allow-listed in `~/.claude/settings.json`, so it always prompts
+- `~/.claude/skills/agy` — a junction to `.claude/skills/agy/` here, not a file of its own. It
+  is what makes the `agy` skill load in every project; the content is versioned in this repo
 - `~/.claude/skills/glm` — a junction to `.claude/skills/glm/` here, not a file of its own. It is
   what makes the `glm` skill load in every project; the content is versioned in this repo
 - `~/.claude/settings.json` — the permission entries allowing the two workers to run without a
@@ -143,9 +150,11 @@ Outside the repo, and just as much part of the system:
   constrains any argument, which is why both wrappers check `--dir` themselves
 - `~/.gemini/antigravity-cli/settings.json` — agy's own model, permissions, workspace trust
 
-Change one of the four external files and say so in the summary: they are not in this repo's
-history and nothing else records that they moved. The junction is the exception — its content
-is this repo's — but say so if you re-point or remove it.
+The wrapper and skill sources are versioned here; their installed copies and the two settings
+files are not. Change anything out there — `~/.claude/settings.json`,
+`~/.gemini/antigravity-cli/settings.json`, the installed copies in `~/.claude/bin/`, or a
+junction — and say so in the summary: nothing in this repo's history records it, including a
+junction being re-pointed or removed.
 
 Legacy areas with constraints of their own are listed in `.claude/rules/known-problems.md`; it
 loads itself when you open a file under one of those paths.
@@ -164,6 +173,12 @@ loads itself when you open a file under one of those paths.
   refuses to auto-approve edits on a dirty tree. A raw call loses all four, and a hung one blocks
   the session with nothing to show. `glm-run.py` additionally keeps the Z.AI key out of argv and
   the endpoint out of `settings.json`, neither of which a hand-written call would do.*
+- **The driver loads the worker's skill (`glm` or `agy`) before the call.** Convention, not a
+  gate: the permission entry approves the wrapper command whether or not the skill was loaded,
+  and from any session.
+  *Why: the skill carries what a call costs, how a hung call behaves, and the loop for
+  verifying a delegated diff. Without it the first delegation is a guess made with someone's
+  quota.*
 - **Flags and model ids are checked against the tool, not remembered.**
   `agy models` for model ids, `agy <subcommand> --help` for flags. Note that `-p` needs its value
   attached (`-p=text`) and does not read stdin.

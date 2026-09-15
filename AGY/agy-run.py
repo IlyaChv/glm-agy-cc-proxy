@@ -16,11 +16,12 @@ Why a wrapper instead of calling `agy -p` directly:
     what an auto-denied tool call looks like: status SUCCESS, response "";
   - refuses to run on a dirty or non-git tree, which is the only thing standing
     between --dangerously-skip-permissions and unrecoverable edits (--force skips
-    this check while leaving tools on). The guarantee is scoped to --dir: nothing
-    confines agy's file tools to that directory, so edits outside it are neither
-    checked nor revertible. It is also scoped to what `git status --porcelain`
-    reports, which does not include gitignored files - those stay invisible to
-    the check and are not restored by `git checkout .`.
+    this check while leaving tools on). The guarantee covers the git-tracked
+    files inside --dir and --add-dir only: nothing confines agy's file tools to
+    those directories, so edits outside them are neither checked nor revertible.
+    And `git status --porcelain` does not report gitignored files - those stay
+    invisible to the check and are not restored by `git checkout .` (the wrapper
+    names them before the run and reports what changed after it).
 
 The default is --mode accept-edits --sandbox with permissions enforced. This was
 chosen by measurement on 2026-09-13, not from the docs:
@@ -95,11 +96,12 @@ def denied_permission(stderr_text):
     found = DENIED_RE.search(stderr_text)
     return found.group(1) if found else None
 
-# CreateProcess caps the whole command line at 32767 chars; leave room for the
-# other flags, the exe path, and Windows argv quoting, which expands embedded
-# quotes and backslashes so a quote-heavy brief's quoted command line can be
-# longer than the raw prompt string.
-MAX_INLINE_PROMPT = 24000
+# CreateProcess caps the whole command line at 32767 chars. The real thing is
+# what gets measured: subprocess.list2cmdline applies the same Windows argv
+# quoting the OS will see, and quoting expands embedded quotes and backslashes,
+# so a quote-heavy brief's command line is longer than the prompt string alone.
+# The margin leaves room for anything appended between here and CreateProcess.
+MAX_CMDLINE = 32767 - 512
 
 # agy's stderr is copied through to the caller's transcript. It carries whatever
 # agy's own tools printed, so cap it: a transcript is copied, logged and shared,
@@ -131,10 +133,16 @@ FORBIDDEN_SUBPATHS = [
 
 def find_agy():
     env = os.environ.get("AGY_BIN")
-    if env and os.path.isfile(env):
-        return env
     if env:
-        sys.stderr.write("agy-run: warning: AGY_BIN={} is not a file, ignoring it\n".format(env))
+        if os.path.isfile(env):
+            return env
+        # A pinned build is pinned for a reason, usually a known bug in the
+        # installed one; falling through would silently run a different build
+        # and hide exactly the thing the pin was for.
+        sys.exit(
+            "agy-run: AGY_BIN={} is not an executable file. Fix or unset it; "
+            "refusing to fall back to another build.".format(env)
+        )
     local = os.environ.get("LOCALAPPDATA", "")
     if local:
         guess = os.path.join(local, "agy", "bin", "agy.exe")
@@ -151,6 +159,32 @@ def git(args, cwd):
         ["git"] + args, cwd=cwd, capture_output=True, text=True, encoding="utf-8",
         errors="replace",
     )
+
+
+def forbidden_subpath(real):
+    """The FORBIDDEN_SUBPATHS entry `real` sits inside (or equals), or None."""
+    home = os.path.abspath(os.path.expanduser("~"))
+    for rel in FORBIDDEN_SUBPATHS:
+        forbidden = os.path.realpath(os.path.join(home, *rel.split("/")))
+        if real == forbidden or real.startswith(forbidden + os.sep):
+            return rel
+    return None
+
+
+def check_prompt_file_allowed(path):
+    """Refuse a --prompt-file that sits under the forbidden directories.
+
+    The file's contents become the brief and ride through the whole call, so
+    pointing this at a credential store reads it into the transcript. Same
+    floor as --dir, and also not skippable with --force.
+    """
+    rel = forbidden_subpath(os.path.realpath(os.path.abspath(path)))
+    if rel:
+        sys.exit(
+            "agy-run: refused, --prompt-file is inside {}, which holds credentials "
+            "or agent configuration.\n         If you truly meant it, move the file "
+            "out first.".format(rel)
+        )
 
 
 def check_dir_allowed(work_dir):
@@ -172,14 +206,13 @@ def check_dir_allowed(work_dir):
             "project, not at everything you own."
         )
 
-    for rel in FORBIDDEN_SUBPATHS:
-        forbidden = os.path.realpath(os.path.join(home, *rel.split("/")))
-        if real == forbidden or real.startswith(forbidden + os.sep):
-            sys.exit(
-                "agy-run: refused, --dir is inside {}, which holds credentials or "
-                "agent configuration.\n         No delegated task needs to work "
-                "there. If you truly meant it, move the files out first.".format(rel)
-            )
+    rel = forbidden_subpath(real)
+    if rel:
+        sys.exit(
+            "agy-run: refused, --dir is inside {}, which holds credentials or "
+            "agent configuration.\n         No delegated task needs to work "
+            "there. If you truly meant it, move the files out first.".format(rel)
+        )
 
     # Optional per-machine narrowing, off unless the caller sets it. Semicolon
     # separated, since Windows paths contain colons.
@@ -244,6 +277,119 @@ def check_clean_tree(work_dir):
         )
 
 
+def report_changes(dirs):
+    """Say what agy actually touched.
+
+    The clean-tree check was a point-in-time guarantee; this does not close
+    the window between the check and agy's first write, but it does mean
+    nobody has to go looking for what changed.
+    """
+    for d in dirs:
+        after = git(["status", "--porcelain"], d)
+        touched = [l for l in after.stdout.splitlines() if l.strip()]
+        if not touched:
+            continue
+        shown = "\n".join("         " + t for t in touched[:15])
+        more = "" if len(touched) <= 15 else "\n         ... and {} more".format(
+            len(touched) - 15
+        )
+        sys.stderr.write(
+            "agy-run: {} path(s) changed in {} - revert with `git checkout .` there "
+            "if this is not what you wanted:\n{}{}\n".format(len(touched), d, shown, more)
+        )
+
+
+def build_cmd(exe, prompt, args, mode, sandbox, blanket):
+    cmd = [
+        exe,
+        "-p=" + prompt,
+        "--model", args.model,
+        "--output-format", "json",
+        "--print-timeout", "{}m".format(args.timeout_min),
+    ]
+    if args.effort:
+        cmd += ["--effort", args.effort]
+    if args.agent:
+        cmd += ["--agent", args.agent]
+    if sandbox:
+        cmd.append("--sandbox")
+    if mode:
+        cmd += ["--mode", mode]
+    if args.add_dir:
+        for d in args.add_dir:
+            cmd += ["--add-dir", d]
+    if blanket:
+        cmd.append("--dangerously-skip-permissions")
+    return cmd
+
+
+def kill_tree(proc):
+    """taskkill takes the whole tree, which proc.kill() cannot.
+
+    Every way taskkill can fail is invisible, so always fall back to killing
+    the child ourselves: an orphaned agy keeps writing in --dir with no
+    reader on its pipe, and nothing in the output would say so.
+    """
+    try:
+        subprocess.run(
+            ["taskkill", "/PID", str(proc.pid), "/T", "/F"], capture_output=True, timeout=10
+        )
+    except Exception as exc:
+        sys.stderr.write("agy-run: taskkill failed ({}), killing the child only\n".format(exc))
+    try:
+        proc.kill()
+        proc.wait(timeout=5)
+    except Exception:
+        pass
+
+
+def echo_stderr(err):
+    """Copy agy's stderr through, truncated in the middle.
+
+    Truncated, not scrubbed: this is agy's own tool output and it lands in a
+    transcript. Keep both ends - the denial notice tends to lead, the
+    traceback to trail - and say how much was dropped. denied_permission()
+    reads the full text, not this copy, so nothing the wrapper needs is lost.
+    """
+    if not err:
+        return
+    if len(err) <= MAX_STDERR_CHARS:
+        sys.stderr.write(err)
+        return
+    half = MAX_STDERR_CHARS // 2
+    sys.stderr.write(
+        err[:half]
+        + "\n... agy-run: {} chars of agy stderr omitted ...\n".format(
+            len(err) - MAX_STDERR_CHARS
+        )
+        + err[-half:]
+    )
+
+
+def parse_payload(raw):
+    """The last complete JSON object in agy's stdout, or None.
+
+    agy is on a weekly release cadence and may print banners or progress
+    lines around the payload, so anchoring on the first brace anywhere would
+    start the parse mid-diagnostic. Try the whole stdout first, then walk the
+    brace positions from the end and accept only an object that runs to the
+    end of the stream - which is where agy flushes its result.
+    """
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError:
+        pass
+    decoder = json.JSONDecoder()
+    for start in reversed([m.start() for m in re.finditer(r"\{", raw)]):
+        try:
+            obj, end = decoder.raw_decode(raw, start)
+        except ValueError:
+            continue
+        if isinstance(obj, dict) and not raw[end:].strip():
+            return obj
+    return None
+
+
 def main():
     ap = argparse.ArgumentParser(
         prog="agy-run",
@@ -274,7 +420,10 @@ def main():
     )
     ap.add_argument(
         "--force", action="store_true",
-        help="skip the clean-tree check. Does not skip the forbidden-directory check",
+        help="skip the clean-tree check. Does not skip the forbidden-directory check. "
+        "The guard's scope: it covers git-tracked files inside --dir and --add-dir "
+        "only - gitignored files and everything outside those directories are "
+        "neither checked nor revertible",
     )
     ap.add_argument("--timeout-min", type=int, default=5, help="default: 5")
     ap.add_argument(
@@ -294,7 +443,7 @@ def main():
     args = ap.parse_args()
 
     if args.timeout_min <= 0:
-        sys.exit("agy-run: --timeout-min must be positive, got {}".format(args.timeout_min))
+        ap.error("--timeout-min must be positive, got {}".format(args.timeout_min))
 
     work_dir = os.path.abspath(args.dir)
     if not os.path.isdir(work_dir):
@@ -303,6 +452,7 @@ def main():
     if args.prompt_file:
         if not os.path.isfile(args.prompt_file):
             sys.exit("agy-run: no such prompt file: " + args.prompt_file)
+        check_prompt_file_allowed(args.prompt_file)
         with open(args.prompt_file, encoding="utf-8") as fh:
             prompt = fh.read()
     else:
@@ -340,45 +490,33 @@ def main():
         for d in [work_dir] + extra_dirs:
             warn_about_ignored(d)
 
-    # Too long for one argv element: point agy at the file instead. This costs a
-    # read tool call inside agy, which is the degraded path - keep briefs short.
-    if len(prompt) > MAX_INLINE_PROMPT:
+    exe = find_agy()
+    cmd = build_cmd(exe, prompt, args, mode, sandbox, blanket)
+    quoted = len(subprocess.list2cmdline(cmd))
+    if quoted > MAX_CMDLINE:
         if not args.prompt_file:
+            # An inline brief is never auto-converted: converting it would
+            # need a file to point at, and inventing one is a silent rewrite
+            # of what the caller passed. Say what to do and fail.
             sys.exit(
-                "agy-run: prompt is {} chars, over the {} limit; pass it as "
-                "--prompt-file so it can be referenced by path. Quote-heavy briefs "
-                "should use --prompt-file well before the limit.".format(
-                    len(prompt), MAX_INLINE_PROMPT
+                "agy-run: the quoted command line is {} chars, over the {} "
+                "CreateProcess limit. The brief alone is {} chars - Windows "
+                "argv quoting expands embedded quotes and backslashes, so "
+                "quote-heavy briefs overflow well before their raw length "
+                "does. Pass it as --prompt-file.".format(
+                    quoted, MAX_CMDLINE, len(prompt)
                 )
             )
+        # Too long for one argv element: point agy at the file instead. This
+        # costs a read tool call inside agy, which is the degraded path - keep
+        # briefs short.
         ref = os.path.abspath(args.prompt_file)
         prompt = "Read the file {} and follow the instructions in it.".format(ref)
-        print(
-            "agy-run: brief exceeds {} chars, passing it by path instead of "
-            "inline".format(MAX_INLINE_PROMPT),
-            file=sys.stderr,
+        cmd = build_cmd(exe, prompt, args, mode, sandbox, blanket)
+        sys.stderr.write(
+            "agy-run: brief would overflow the {}-char Windows command line, "
+            "passing it by path instead of inline\n".format(MAX_CMDLINE)
         )
-
-    cmd = [
-        find_agy(),
-        "-p=" + prompt,
-        "--model", args.model,
-        "--output-format", "json",
-        "--print-timeout", "{}m".format(args.timeout_min),
-    ]
-    if args.effort:
-        cmd += ["--effort", args.effort]
-    if args.agent:
-        cmd += ["--agent", args.agent]
-    if sandbox:
-        cmd.append("--sandbox")
-    if mode:
-        cmd += ["--mode", mode]
-    if args.add_dir:
-        for d in args.add_dir:
-            cmd += ["--add-dir", d]
-    if blanket:
-        cmd.append("--dangerously-skip-permissions")
 
     # Hard wall clock on top of agy's own timeout: #548 can hang a tool call past
     # --print-timeout, and a wedged subprocess blocks the calling session.
@@ -395,58 +533,25 @@ def main():
     try:
         out, err = proc.communicate(timeout=hard_limit)
     except subprocess.TimeoutExpired:
-        # taskkill takes the whole tree, which proc.kill() cannot. But every way
-        # it can fail is invisible, so always fall back to killing the child
-        # ourselves: an orphaned agy keeps writing in --dir with no reader on its
-        # pipe, and nothing in the output would say so.
-        try:
-            subprocess.run(
-                ["taskkill", "/PID", str(proc.pid), "/T", "/F"],
-                capture_output=True,
-                timeout=5,
-            )
-        except Exception as exc:
-            sys.stderr.write("agy-run: taskkill failed ({}), killing the child only\n".format(exc))
-        try:
-            proc.kill()
-            proc.wait(timeout=5)
-        except Exception:
-            pass
+        kill_tree(proc)
+        if can_write and not args.force:
+            report_changes([work_dir] + extra_dirs)
         sys.exit(
             "agy-run: agy did not return within {}s. Known issue: a tool call can "
             "hang in headless mode (antigravity-cli#548). Do not retry the same "
             "call; narrow it to read-only, or do it yourself.".format(hard_limit)
         )
 
-    if err:
-        # Truncated, not scrubbed: this is agy's tool output and it lands in a
-        # transcript. Keep both ends - the denial notice tends to lead, the
-        # traceback to trail - and say how much was dropped.
-        if len(err) > MAX_STDERR_CHARS:
-            half = MAX_STDERR_CHARS // 2
-            sys.stderr.write(
-                err[:half]
-                + "\n... agy-run: {} chars of agy stderr omitted ...\n".format(
-                    len(err) - MAX_STDERR_CHARS
-                )
-                + err[-half:]
-            )
-        else:
-            sys.stderr.write(err)
+    echo_stderr(err)
 
-    raw = out.strip()
-    try:
-        payload = json.loads(raw)
-    except json.JSONDecodeError:
-        start = raw.find("{")
-        if start == -1:
-            sys.exit(
-                "agy-run: agy returned no JSON (exit {}).\n{}".format(proc.returncode, raw[:2000])
+    raw = (out or "").strip()
+    payload = parse_payload(raw)
+    if payload is None:
+        sys.exit(
+            "agy-run: agy returned no parseable JSON object (exit {}).\n{}".format(
+                proc.returncode, raw[:2000]
             )
-        try:
-            payload = json.loads(raw[start:])
-        except json.JSONDecodeError as exc:
-            sys.exit("agy-run: cannot parse agy output ({}):\n{}".format(exc, raw[:2000]))
+        )
 
     # `null`, a list or a bare number all parse as valid JSON, and every field
     # read below would raise on them. Fail with the diagnostic instead.
@@ -461,20 +566,7 @@ def main():
     # looks like now. This does not close the window between the check and agy's
     # first write, but it does mean nobody has to go looking for what changed.
     if can_write and not args.force:
-        for d in [work_dir] + extra_dirs:
-            after = git(["status", "--porcelain"], d)
-            touched = [l for l in after.stdout.splitlines() if l.strip()]
-            if touched:
-                shown = "\n".join("         " + t for t in touched[:15])
-                more = "" if len(touched) <= 15 else "\n         ... and {} more".format(
-                    len(touched) - 15
-                )
-                sys.stderr.write(
-                    "agy-run: {} path(s) changed in {} - revert with `git checkout .` "
-                    "there if this is not what you wanted:\n{}{}\n".format(
-                        len(touched), d, shown, more
-                    )
-                )
+        report_changes([work_dir] + extra_dirs)
 
     status = payload.get("status", "UNKNOWN")
     usage = payload.get("usage", {})
