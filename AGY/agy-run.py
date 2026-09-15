@@ -9,7 +9,11 @@ Why a wrapper instead of calling `agy -p` directly:
   - pins --output-format json and --print-timeout, so a hung call fails fast
     instead of eating the default 5 minutes silently;
   - passes the prompt as a single argv element, so quotes and newlines survive
-    (Windows PowerShell 5.1 mangles them when calling a native exe);
+    (Windows PowerShell 5.1 mangles them when calling a native exe). The brief
+    is therefore visible in the process list to any process on this machine
+    while the call runs; --prompt-file does not change that - its content is
+    still passed in argv unless it exceeds the ceiling - so nothing secret
+    goes in a brief;
   - reports usage, so the caller can see a call cost ~17k tokens read / ~44k
     write and stop before burning the quota blind;
   - exits non-zero when agy reports failure OR returns an empty answer, which is
@@ -140,7 +144,7 @@ def find_agy():
         # installed one; falling through would silently run a different build
         # and hide exactly the thing the pin was for.
         sys.exit(
-            "agy-run: AGY_BIN={} is not an executable file. Fix or unset it; "
+            "agy-run: AGY_BIN={} is not a file. Fix or unset it; "
             "refusing to fall back to another build.".format(env)
         )
     local = os.environ.get("LOCALAPPDATA", "")
@@ -286,6 +290,13 @@ def report_changes(dirs):
     """
     for d in dirs:
         after = git(["status", "--porcelain"], d)
+        if after.returncode != 0:
+            first_line = (after.stderr or "").splitlines()[0] if after.stderr else ""
+            sys.stderr.write(
+                "agy-run: warning: change report unavailable for {} (git status "
+                "failed: {})\n".format(d, first_line)
+            )
+            continue
         touched = [l for l in after.stdout.splitlines() if l.strip()]
         if not touched:
             continue
@@ -373,7 +384,10 @@ def parse_payload(raw):
     lines around the payload, so anchoring on the first brace anywhere would
     start the parse mid-diagnostic. Try the whole stdout first, then walk the
     brace positions from the end and accept only an object that runs to the
-    end of the stream - which is where agy flushes its result.
+    end of the stream - which is where agy flushes its result. This tolerates
+    leading noise only: trailing text after the JSON object makes the parse
+    fail by design, so a truncated or mixed stream is not mistaken for a
+    payload.
     """
     try:
         return json.loads(raw)
@@ -499,11 +513,12 @@ def main():
             # need a file to point at, and inventing one is a silent rewrite
             # of what the caller passed. Say what to do and fail.
             sys.exit(
-                "agy-run: the quoted command line is {} chars, over the {} "
-                "CreateProcess limit. The brief alone is {} chars - Windows "
-                "argv quoting expands embedded quotes and backslashes, so "
-                "quote-heavy briefs overflow well before their raw length "
-                "does. Pass it as --prompt-file.".format(
+                "agy-run: the quoted command line is {} chars, over the "
+                "wrapper's {} char ceiling (CreateProcess caps at 32767). The "
+                "brief alone is {} chars - Windows argv quoting expands "
+                "embedded quotes and backslashes, so quote-heavy briefs "
+                "overflow well before their raw length does. Pass it as "
+                "--prompt-file.".format(
                     quoted, MAX_CMDLINE, len(prompt)
                 )
             )
@@ -511,6 +526,18 @@ def main():
         # costs a read tool call inside agy, which is the degraded path - keep
         # briefs short.
         ref = os.path.abspath(args.prompt_file)
+        ref_real = os.path.normcase(os.path.realpath(ref))
+        workspace_dirs = [
+            os.path.normcase(os.path.realpath(d)) for d in [work_dir] + extra_dirs
+        ]
+        if not any(
+            ref_real == d or ref_real.startswith(d + os.sep) for d in workspace_dirs
+        ):
+            sys.stderr.write(
+                "agy-run: warning: the brief file {} is outside the workspace; "
+                "under --sandbox agy may be denied reading it and return an "
+                "empty answer. Move it under --dir or pass --add-dir.\n".format(ref)
+            )
         prompt = "Read the file {} and follow the instructions in it.".format(ref)
         cmd = build_cmd(exe, prompt, args, mode, sandbox, blanket)
         sys.stderr.write(

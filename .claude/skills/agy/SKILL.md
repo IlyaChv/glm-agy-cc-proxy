@@ -43,7 +43,7 @@ already passed as `--prompt-file`.
 | `--force` | skip the clean-tree check |
 | `--timeout-min` | default 5 |
 | `--no-sandbox` | do not pass `--sandbox` (it is on by default) |
-| `--mode accept-edits\|plan` | agy's execution mode; defaults to `accept-edits` |
+| `--mode accept-edits\|plan` | agy's execution mode; defaults to `accept-edits` unless `--no-tools` or `--allow-shell` is given, in which case no `--mode` is passed unless set explicitly |
 | `--add-dir` | additional workspace directory, repeatable; each must be a clean git repo too |
 
 ## What the default does, and why
@@ -83,9 +83,12 @@ only on success.
 
 **Tools are on by default, and that is not really optional.** Headless mode cannot prompt for a
 permission, so it auto-denies — and an auto-denied tool call comes back as `status=SUCCESS` with an
-empty answer (antigravity-cli#548). The wrapper runs agy with `--dangerously-skip-permissions` so
-that anything touching files works at all, and turns the empty answer into a non-zero exit so it
-cannot pass for success. `--no-tools` is for prompts that need no file access whatsoever.
+empty answer (antigravity-cli#548). By default the wrapper runs agy with `--mode accept-edits
+--sandbox`, permissions enforced — not skipped — so a tool call outside the workspace is refused
+rather than silently denied; `--dangerously-skip-permissions` appears only when `--allow-shell` is
+passed, because agy's `command()` grants are ignored in headless mode and that flag is the only way
+to give it a shell. Either way the wrapper turns an empty answer into a non-zero exit so it cannot
+pass for success. `--no-tools` is for prompts that need no file access whatsoever.
 
 ## What a call costs
 
@@ -133,6 +136,9 @@ agy starts with no memory of this conversation. The brief carries everything:
   and you get suggestions;
 - explicit acceptance criteria;
 - long material (logs, specs, excerpts) in a file that the brief points to, not pasted inline.
+
+The brief travels in argv and is visible in the process list to any process on this machine while
+the call runs, whether passed inline or via `--prompt-file`; nothing secret goes into a brief.
 
 **Leave agy nothing to discover.** On the default path a brief that makes it look around fails, and
 it costs a full call to find out. Asked to "read AGENTS.md in the current working directory" it
@@ -199,8 +205,9 @@ refusal on your own judgement.
 
 `--dir` inside `.gemini`, `.claude`, `.ssh`, `.aws`, `.gnupg`, `.config`, `.docker`,
 `AppData/Roaming` or `AppData/Local/Microsoft`, or set to the home directory itself, is refused
-outright. `--force` does not lift that one. Setting `AGY_ALLOWED_ROOTS` (semicolon-separated)
-narrows it further to just those roots.
+outright. `--force` does not lift that one. A `--prompt-file` under one of those same directories
+is refused the same way, by `check_prompt_file_allowed`. Setting `AGY_ALLOWED_ROOTS`
+(semicolon-separated) narrows it further to just those roots.
 
 Two things the wrapper now prints, and both are worth reading:
 

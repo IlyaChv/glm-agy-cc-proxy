@@ -380,20 +380,24 @@ naming the tool and how to allow it», исправлено в 1.1.3, добав
 
 ## Closure log — 2026-09-15
 
-- **SEC-1** — closed: Closed 2026-09-15 in 929032a: the guard's scope (tracked files inside --dir and --add-dir only) is now stated in --help and the module docstring, gitignored paths are listed before the run and changed paths after it.
+- **SEC-1** — closed: Accepted 2026-09-15 as a known limit, documented in AGY/README.md; the guard's scope is stated in --help and the docstring (929032a). Not closable from the wrapper.
 - **SEC-2** — closed: Recorded 2026-09-15 as a known limit in AGY/README.md; not closable from the wrapper.
-- **SEC-3** — closed: Closed 2026-09-15 in 929032a: check_dir_allowed is the floor under the permission entry, --force does not lift it, and --prompt-file is refused under the same forbidden directories.
-- **SEC-4** — closed: Closed 2026-09-15 in 929032a: gitignored paths in each working directory are printed before the run as being outside the safety net.
-- **SEC-5** — closed: Closed 2026-09-15 in 929032a: agy's stderr goes through echo_stderr, bounded and filtered as in glm-run.py.
-- **COR-2** — closed: Closed 2026-09-15 in 929032a: kill_tree ports glm-run.py's whole-process-tree kill on timeout.
+- **SEC-3** — closed: Already present in the wrapper as versioned at c8b466e; refactored into forbidden_subpath (shared by check_dir_allowed and the new check_prompt_file_allowed) in 929032a.
+- **SEC-4** — closed: Already present in the wrapper as versioned at c8b466e; warn_about_ignored is unchanged through 929032a.
+- **SEC-5** — closed: Bounded 2026-09-15 (echo_stderr, 4000 chars, as in glm-run.py) but not redacted; recorded as a known limit in AGY/README.md. Still open as to redaction.
+- **COR-1** — closed: Closed before 2026-09-15; confirmed in the tree on 2026-09-15: proc.returncode checked after the payload parses (agy-run.py, run/main).
+- **COR-2** — closed: Already present in the wrapper as versioned at c8b466e; refactored into kill_tree in 929032a.
 - **COR-3** — closed: Closed 2026-09-15 in 929032a: the payload is the last complete JSON object in stdout, parsed with json.JSONDecoder; raw.find("{") is gone.
-- **COR-4** — closed: Closed 2026-09-15 in 929032a: every decode of agy's output uses errors="replace" consistently, git() included.
+- **COR-4** — closed: Already present in the wrapper as versioned at c8b466e; unchanged in git() through 929032a.
 - **COR-5** — closed: Closed 2026-09-15 in 929032a: a AGY_BIN that is not an executable file exits with an error naming the value instead of falling back.
-- **COR-6** — closed: Closed 2026-09-15 in 929032a: --timeout-min <= 0 is an argparse error.
+- **COR-6** — closed: Already present in the wrapper as versioned at c8b466e; reworded from sys.exit to ap.error in main() in 929032a.
 - **COR-7** — closed: Closed 2026-09-15 in 929032a: the limit is measured on subprocess.list2cmdline(cmd), the quoted command line, not on the prompt's raw length.
-- **COR-8** — closed: Closed 2026-09-15 in 929032a: one note is written to stderr when replacement characters were introduced while decoding.
+- **COR-8** — closed: Already present in the wrapper as versioned at c8b466e; unchanged, inline in main(), through 929032a.
+- **DOC-1** — closed: Closed before 2026-09-15; confirmed in the tree on 2026-09-15: AGENTS.md Git section says master.
+- **DOC-2** — closed: Closed before 2026-09-15; confirmed in the tree on 2026-09-15: CLAUDE.md states the Agent tool takes model but no effort.
 - **DOC-3** — closed: Closed 2026-09-15 on agent/audit-agy-fixes: the duplicated sentences were removed from CLAUDE.md, which now points at the AGENTS.md section.
 - **DOC-4** — closed: Closed 2026-09-15 in 929032a: recorded in AGY/README.md that "delegation goes through the skill" is convention only, with no technical enforcement.
+- **DOC-5** — closed: Closed before 2026-09-15; confirmed in the tree on 2026-09-15: docstring says --force skips the check while leaving tools on.
 - **DOC-6** — closed: Recorded 2026-09-15 as a known limit in AGY/README.md; not closable from the wrapper.
 - **DOC-7** — closed: Closed 2026-09-15 on agent/audit-agy-fixes: SKILL.md now states that an oversized inline --prompt hard-fails and is never auto-converted, and that the limit is the quoted command line.
 - **DOC-9** — closed: Closed 2026-09-15: docs/adr/ exists with ADR-001-glm-endpoint-in-child-environment.md and ADR-INDEX.md.

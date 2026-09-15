@@ -30,6 +30,14 @@ run. They are recorded here rather than fixed because no change to the wrapper c
   rewrites that file on its own, so the fence is only as durable as the rewrite allows. What
   would close it: a deny rule that survives agy's rewrite, or `--sandbox` (which blocks
   sensitive files) on every call.
+- **SEC-1 — agy is not confined to `--dir`.** The clean-tree guard only covers git-tracked
+  files inside `--dir` and `--add-dir`; `allowNonWorkspaceAccess: false` cannot be pinned
+  because agy rewrites its own settings file on every run. Accepted: the guard reports what
+  changed rather than preventing agy from reaching outside the workspace.
+
+- **SEC-5 — agy's stderr is bounded but not redacted.** `echo_stderr` caps what reaches the
+  transcript at 4000 chars, the same as `glm-run.py`, but does not scrub it: a credential
+  echoed by a failing tool call inside that window still reaches the transcript.
 
 One more, in the same spirit: **"delegation goes through the skill" is convention only**
 (DOC-4). The permission entry approves the wrapper command whether or not the skill was

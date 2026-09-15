@@ -87,7 +87,7 @@ described, not narrower. Merged into SEC-2.
   paths, nothing can revert them, and the wrapper still reports a clean run.
 - fix: set `allowNonWorkspaceAccess: false`, and say in the docstring that the guarantee is scoped
   to `--dir`.
-- closed: Closed 2026-09-15 in 929032a: the guard's scope (tracked files inside --dir and --add-dir only) is now stated in --help and the module docstring, gitignored paths are listed before the run and changed paths after it.
+- closed: Accepted 2026-09-15 as a known limit, documented in AGY/README.md; the guard's scope is stated in --help and the docstring (929032a). Not closable from the wrapper.
 
 ### SEC-2 · agy's `permissions.allow` is bypassed today and too broad to be tomorrow's control
 - from: A3-6, A3-7, A3-8, A3-12, merged and re-framed by the lead
@@ -129,7 +129,7 @@ described, not narrower. Merged into SEC-2.
 - fix: none free of cost. Either accept it and say so, or have `agy-run.py` require `--dir` to sit
   under an allow-listed root. Note that AGENTS.md rule 5 (never touch `oauth_creds.json`) is the
   only thing covering the worst case, and it is a policy, not a mechanism.
-- closed: Closed 2026-09-15 in 929032a: check_dir_allowed is the floor under the permission entry, --force does not lift it, and --prompt-file is refused under the same forbidden directories.
+- closed: Already present in the wrapper as versioned at c8b466e; refactored into forbidden_subpath (shared by check_dir_allowed and the new check_prompt_file_allowed) in 929032a.
 
 ### SEC-4 · The clean-tree guard cannot see gitignored files
 - from: A1-2
@@ -145,7 +145,7 @@ described, not narrower. Merged into SEC-2.
   tree reads clean before and after; the file is gone with no history to restore it from.
 - fix: name the limit in the refusal text and the docstring. Actually protecting ignored files
   needs a backup step, which is larger than this script.
-- closed: Closed 2026-09-15 in 929032a: gitignored paths in each working directory are printed before the run as being outside the safety net.
+- closed: Already present in the wrapper as versioned at c8b466e; warn_about_ignored is unchanged through 929032a.
 
 ### SEC-5 · agy's stderr is copied into the transcript unfiltered and unbounded
 - from: A3-9
@@ -161,7 +161,7 @@ described, not narrower. Merged into SEC-2.
 - failure: a tool call that errors near a credential echoes an argument or a path into the Claude
   Code transcript. AGENTS.md rule 3 treats that as compromise the moment it happens.
 - fix: cap the echoed length and name stderr as untrusted passthrough in the docstring.
-- closed: Closed 2026-09-15 in 929032a: agy's stderr goes through echo_stderr, bounded and filtered as in glm-run.py.
+- closed: Bounded 2026-09-15 (echo_stderr, 4000 chars, as in glm-run.py) but not redacted; recorded as a known limit in AGY/README.md. Still open as to redaction.
 
 ---
 
@@ -180,6 +180,7 @@ described, not narrower. Merged into SEC-2.
   wrapper prints the answer and exits 0; a crashed run is reported as clean. This is precisely the
   failure class the wrapper exists to prevent.
 - fix: after the payload parses, warn (or fail) when `proc.returncode != 0`.
+- closed: Closed before 2026-09-15; confirmed in the tree on 2026-09-15: proc.returncode checked after the payload parses (agy-run.py, run/main).
 
 ### COR-2 · Timeout kills agy but not the processes agy spawned
 - from: A1-4 · file: `~/.claude/bin/agy-run.py:163-178`
@@ -190,7 +191,7 @@ described, not narrower. Merged into SEC-2.
   while a process agy started keeps writing into `--dir`.
 - fix: on `TimeoutExpired`, kill the tree (`taskkill /PID <pid> /T /F`), which needs `Popen` to
   keep the pid.
-- closed: Closed 2026-09-15 in 929032a: kill_tree ports glm-run.py's whole-process-tree kill on timeout.
+- closed: Already present in the wrapper as versioned at c8b466e; refactored into kill_tree in 929032a.
 
 ### COR-3 · `raw.find("{")` assumes stdout holds nothing but the payload
 - from: A1-5 · file: `~/.claude/bin/agy-run.py:183-192`
@@ -214,7 +215,7 @@ described, not narrower. Merged into SEC-2.
 - failure: a filename in `--dir` in a legacy codepage makes `git status` output undecodable; the
   user gets a raw `UnicodeDecodeError` traceback instead of one of the script's refusal messages.
 - fix: add `errors="replace"`.
-- closed: Closed 2026-09-15 in 929032a: every decode of agy's output uses errors="replace" consistently, git() included.
+- closed: Already present in the wrapper as versioned at c8b466e; unchanged in git() through 929032a.
 
 ### COR-5 · A broken `AGY_BIN` override is silently ignored
 - from: A1-9 · file: `~/.claude/bin/agy-run.py:41-53`
@@ -232,7 +233,7 @@ described, not narrower. Merged into SEC-2.
 - claim: `type=int` with no range check. `--timeout-min -10` yields `hard_limit = -570`, passed
   straight to `subprocess.run(timeout=...)`.
 - fix: one line — reject values `<= 0` after parsing.
-- closed: Closed 2026-09-15 in 929032a: --timeout-min <= 0 is an argparse error.
+- closed: Already present in the wrapper as versioned at c8b466e; reworded from sys.exit to ap.error in main() in 929032a.
 
 ### COR-7 · The 30 000-char guard counts characters, not the quoted command line
 - from: A1-10 · file: `~/.claude/bin/agy-run.py:36-38,130-137`
@@ -250,7 +251,7 @@ described, not narrower. Merged into SEC-2.
 - severity: **Low** · confidence: **Low** · effort: Low
 - claim: `errors="replace"` silently substitutes U+FFFD; nothing reports that the text was altered.
 - fix: warn once when `"\ufffd" in raw`.
-- closed: Closed 2026-09-15 in 929032a: one note is written to stderr when replacement characters were introduced while decoding.
+- closed: Already present in the wrapper as versioned at c8b466e; unchanged, inline in main(), through 929032a.
 
 ### Noted, not a finding
 **A1-12** — the clean-tree check is a point-in-time guarantee; the tree can change between the
@@ -273,6 +274,7 @@ is out of proportion to a 230-line script. Record it as a stated limitation.
 - failure: an agent runs `git checkout main`, fails, or creates a second branch. The hand-over
   summary of the build session already repeated the error and said the commits were on `main`.
 - fix: one word in AGENTS.md, or rename the branch — whichever the human prefers.
+- closed: Closed before 2026-09-15; confirmed in the tree on 2026-09-15: AGENTS.md Git section says master.
 
 ### DOC-2 · `CLAUDE.md` instructs passing an `effort` per subagent call; no such parameter exists
 - from: A2-3, **verified by the lead** · file: `CLAUDE.md:78-87`
@@ -290,6 +292,7 @@ session's.
   cannot be followed is worse than no rule, because it is followed halfway in silence.
 - fix: drop the effort column's instruction, or state that effort is not per-call controllable and
   the values are informational until the tool exposes it.
+- closed: Closed before 2026-09-15; confirmed in the tree on 2026-09-15: CLAUDE.md states the Agent tool takes model but no effort.
 
 ### DOC-3 · The delegation rule is duplicated across both always-loaded files
 - from: A2-5 · files: `AGENTS.md:152-158`; `CLAUDE.md:58-73`
@@ -324,6 +327,7 @@ session's.
 ```
 - claim: `--force` removes exactly that check while leaving tools auto-approved.
 - fix: add "unless `--force` is passed" to the docstring bullet.
+- closed: Closed before 2026-09-15; confirmed in the tree on 2026-09-15: docstring says --force skips the check while leaving tools on.
 
 ### DOC-6 · `trustedWorkspaces` trusts agy's own install directory, not any project
 - from: A3-5 · file: `~/.gemini/antigravity-cli/settings.json:28-30`
