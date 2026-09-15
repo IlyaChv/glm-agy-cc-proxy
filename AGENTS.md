@@ -119,6 +119,7 @@ In this repo:
 - `.claude/skills/glm/` — the `glm` skill: how to delegate to the GLM worker. Project-scoped
   because `glm-run.py` is reached by a repo-relative path
 - `.claude/rules/` — path-scoped rules, loaded only when a matching file is opened
+- `docs/adr/` — architectural decisions; `ADR-INDEX.md` is the only maintained list of them
 - `docs/templates/` — task brief, ADR, memory entry
 - `GLM/` — two separate things, see its README. `switch-claude.ps1` switches Claude Code itself to
   Z.AI by editing `~/.claude/settings.json` (merging its keys, so the `agy-run` permission
