@@ -320,6 +320,8 @@ a guess about the one thing that mattered.*
 - a secret has appeared in context;
 - the task cannot be completed without a write action, new dependency, or ADR change;
 - reality contradicts the task (the contract, the data, or the code is not what the brief says);
+- a worker or an external service answers with an account, eligibility, quota, auth or region
+  error — say so in the next message, before doing anything else, even if a retry then passes;
 - you have retried the same failure three times without a new hypothesis.
 
 *Why: the failure mode of an autonomous agent is not stopping — it is continuing plausibly.*
