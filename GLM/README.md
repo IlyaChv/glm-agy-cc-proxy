@@ -133,17 +133,19 @@ npm install -g --allow-scripts=@anthropic-ai/claude-code @anthropic-ai/claude-co
 адрес эндпоинта для вызова решается внутри `glm-run.py`.
 
 ```
-python C:/Users/cupik/Desktop/agy-cc-proxy/GLM/glm-run.py --dir . --prompt "..."
-python C:/Users/cupik/Desktop/agy-cc-proxy/GLM/glm-run.py --dir . --prompt-file brief.txt --timeout-min 20
-python C:/Users/cupik/Desktop/agy-cc-proxy/GLM/glm-run.py --no-tools --prompt "..."     # без инструментов, чистое рассуждение
+python C:/Users/cupik/.claude/bin/glm-run.py --dir . --prompt "..."
+python C:/Users/cupik/.claude/bin/glm-run.py --dir . --prompt-file brief.txt --timeout-min 20
+python C:/Users/cupik/.claude/bin/glm-run.py --no-tools --prompt "..."     # без инструментов, чистое рассуждение
 ```
 
-**Звать по абсолютному пути, из любого каталога.** Разрешение в `~/.claude/settings.json`
-записано как `Bash(python C:/Users/cupik/Desktop/agy-cc-proxy/GLM/glm-run.py:*)` и сверяется с
-текстом команды, а не с файлом на диске. В таком написании команда проходит без вопросов из
-любого проекта; `python GLM/glm-run.py` из корня или `python glm-run.py` изнутри `GLM/` тексту
-не соответствуют, и подтверждение спросят. Сам скрипт остаётся в этом репозитории — здесь его
-история; в `~/.claude/bin/` его копии нет намеренно.
+**Звать по абсолютному пути к установленной копии, из любого каталога.** Разрешение в
+`~/.claude/settings.json` записано как `Bash(python C:/Users/cupik/.claude/bin/glm-run.py:*)` и
+сверяется с текстом команды, а не с файлом на диске. В таком написании команда проходит без
+вопросов из любого проекта; `python GLM/glm-run.py` из корня репозитория или `python glm-run.py`
+изнутри `GLM/` тексту не соответствуют, и подтверждение спросят. Версионный исходник остаётся в
+этом репозитории (`glm-agy-cc-proxy/GLM/glm-run.py`) — здесь его история; вызов идёт в
+установленную копию `~/.claude/bin/glm-run.py`, поэтому после правки исходника копию нужно
+переписать поверх неё заново.
 
 До 2026-09-15 запись была относительной, `Bash(python GLM/glm-run.py:*)`, и работала только из
 корня чекаута. Что сверка идёт по тексту команды, проверено тогда из worktree свежим процессом:

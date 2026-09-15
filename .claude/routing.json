@@ -1,56 +1,147 @@
 {
-  "_README": "Routing parameters for this project: who does which kind of work. CLAUDE.md points here instead of repeating the table, so this file is the one place to change it. Copy it into another project and edit the values there - per-project routing is the reason it is data and not prose. Nothing parses this automatically; the agent reads it, so keep the strings meant for a reader.",
-  "version": 1,
+  "_README": "Routing for this project: which kind of work goes to which model or worker. CLAUDE.md points here instead of carrying a table, so this is the one place to change the split. Copy it to .claude/routing.json in every project; edit values per project, keep the shape. Nothing parses it - the agent reads it before the first delegation of a session - so every string is written for a reader. Model and effort of a subagent role are authoritative in the role's agents/<name>.md frontmatter; this file names the role and repeats the pairing for orientation only.",
+  "version": 2,
   "updated": "2026-09-15",
 
+  "conserve": {
+    "scarce": "the lead's context",
+    "rule": "Only the lead session is worth saving. Everything the lead reads is re-sent on every later turn, so the routing question is never 'where is this cheapest' but 'what must never enter the lead's context'. Subagents, GLM and agy are spent freely when that keeps the lead's window small and the result verifiable.",
+    "quota_price_order": ["anthropic", "z.ai", "google"],
+    "quota_price_note": "Most expensive first. Anthropic carries the lead and every Claude subagent; Z.AI carries GLM; Google AI Pro carries agy and refills every five hours."
+  },
+
   "axes": {
-    "_note": "Two different things that look alike. A subagent model is picked from the Agent tool's enum. A worker is a separate process reached through a wrapper in Bash. GLM has no subagent form - model: 'glm' matches nothing.",
+    "_note": "Two mechanisms that look alike and are not interchangeable. A subagent is started with the Agent tool and picks a model from the harness enum; it can receive the lead's context in its prompt and runs in parallel with others. A worker is a separate process reached through a wrapper in Bash; it starts blank on every call, cannot be talked to, and returns one answer. GLM has no subagent form - model: 'glm' matches nothing. agy has no subagent form either.",
     "subagent_models": ["fable", "opus", "sonnet", "haiku"],
     "workers": ["glm", "agy"]
   },
 
+  "tiers": {
+    "_note": "Three tiers for executable work. The lead never calls a worker itself; a driver subagent does, and only the driver's short report reaches the lead.",
+    "lead": "designs, plans, writes the brief for a driver, accepts or rejects the result",
+    "driver": "a subagent that owns one delegated task end to end: writes the worker brief, calls the wrapper, runs the check, re-briefs on failure, commits or reverts, reports in a few lines",
+    "worker": "GLM or agy, one self-contained job per call"
+  },
+
   "roles": {
     "lead": {
-      "covers": "design, plans, briefs, consolidation, final review",
+      "covers": "design, plans, briefs for drivers and subagents, consolidation, final acceptance",
       "kind": "model",
       "model": "fable",
-      "escalate_to": "opus",
-      "escalate_when": "the task is hard enough to earn it",
+      "model_is_parameter": "set per project; opus where Fable is unavailable or the project runs in fast mode. Drivers stay separate subagents whichever model leads - the point of the tier is context isolation, not a different head.",
       "effort": "high",
-      "invoke": "this session, or Agent(model:)"
+      "invoke": "this session"
     },
-    "verify": {
-      "covers": "re-verification and adversarial checks of any result",
-      "kind": "model",
-      "model": "fable",
-      "also_allowed": ["opus"],
-      "constraint": "never the model that produced the result being checked",
+
+    "glm_driver": {
+      "covers": "every self-contained execution task that goes to GLM: implementing an approved plan, a sweep or audit of a module, a long draft, a mechanical multi-file pass",
+      "kind": "subagent",
+      "agent_type": "glm-driver",
+      "model": "opus",
       "effort": "high",
-      "invoke": "Agent(model:)"
+      "why_opus": "the driver decides whether a result is acceptable or needs a re-brief; that is judgement, not mechanics, and it is the last check before the lead sees anything",
+      "loop": {
+        "max_worker_calls": 3,
+        "on_pass": "commit `wip(<scope>): ...` on the task branch",
+        "on_fail": "`git checkout .`, then a new brief that names the concrete failure - never the same brief again",
+        "verification": "the driver runs the project's check command itself; the worker is told not to run it and not to claim it passed",
+        "after_limit": "stop and report, even if the last attempt was close"
+      },
+      "report_to_lead": "at most ten lines: what was done, the check command and its last line, what failed and why, worker calls and tokens spent, commit hash. No diff, no retelling of the worker's answer.",
+      "invoke": "Agent(subagent_type: \"glm-driver\")"
     },
-    "artifact_execution": {
-      "covers": "execution whose deliverable is an artifact, and tasks matching agy's own skills",
-      "kind": "worker",
-      "worker": "agy",
-      "driver_model": "sonnet",
-      "why_driver": "a thin subagent holds agy's long answer out of the lead's context, where it would otherwise be re-sent on every later turn",
-      "invoke": "Agent(model:\"sonnet\") -> agy-run.py"
-    },
-    "execution": {
-      "covers": "every other executable task: sweeps across files, implementing an approved plan, mechanical passes, long drafts",
+
+    "execution_worker": {
+      "covers": "the execution itself, under a glm-driver",
       "kind": "worker",
       "worker": "glm",
-      "invoke": "python C:/Users/cupik/Desktop/agy-cc-proxy/GLM/glm-run.py"
+      "requirements": [
+        "the task is self-contained and ends in a commit",
+        "there is a mechanical acceptance check - a command that must pass",
+        "the working directory is a clean git checkout (the wrapper refuses otherwise)"
+      ],
+      "shell": "off by default; the driver passes --allow-shell only when the task itself needs a terminal (fixtures, a migration, a generator) and says so in its report",
+      "invoke": "python C:/Users/cupik/.claude/bin/glm-run.py, from the driver, never from the lead"
+    },
+
+    "in_flight_execution": {
+      "covers": "a step inside the lead's current work: a one- or two-file edit, a check that needs the context the lead is holding, work on a dirty tree that is inconvenient to commit mid-way, work outside a git repository, small parallel probes",
+      "kind": "subagent",
+      "agent_types": ["implementer", "sweeper", "drafter"],
+      "model": "sonnet",
+      "effort": "see each role's frontmatter",
+      "why_not_glm": "GLM starts blank and needs a clean tree; these tasks need neither the ceremony nor the isolation",
+      "invoke": "Agent(subagent_type: <role>)"
+    },
+
+    "artifact": {
+      "covers": "work whose deliverable is a file or folder produced from scratch: a research report with web search, a long standalone document, a generated module, anything matching one of agy's own skills",
+      "kind": "subagent",
+      "agent_type": "agy-driver",
+      "model": "sonnet",
+      "effort": "medium",
+      "worker": "agy",
+      "boundary": "agy never edits the project's working tree. Its --dir is a side directory the driver prepares (a fresh git repository with the inputs copied in and committed, since the wrapper requires a clean git checkout). The driver returns the artifact's path and a three-line summary; bringing it into the project is the lead's decision, made as an ordinary edit.",
+      "why_sonnet": "the driver has nothing to judge here - it prepares the side directory, calls once, and relays a path",
+      "invoke": "Agent(subagent_type: \"agy-driver\") -> python C:/Users/cupik/.claude/bin/agy-run.py"
+    },
+
+    "verify": {
+      "covers": "re-verification and adversarial checks of a finding before it reaches a report",
+      "kind": "subagent",
+      "agent_type": "verifier",
+      "model": "fable",
+      "also_allowed": ["opus"],
+      "constraint": "never the model that produced the thing being checked; for a finding written by fable, call with model: opus",
+      "effort": "high",
+      "note": "not run on every delegation. A glm-driver's check is verification enough for routine execution; the lead reads the diff when it decides to."
+    },
+
+    "review": {
+      "covers": "code review, line-level finding shards",
+      "kind": "subagent",
+      "agent_type": "reviewer",
+      "model": "opus",
+      "effort": "medium fast pass, high thorough"
+    },
+
+    "research": {
+      "covers": "a question that must be answered from a primary source: a library's current API, a spec, a documented tool behaviour",
+      "kind": "subagent",
+      "agent_type": "researcher",
+      "model": "fable",
+      "effort": "medium or high, not low",
+      "why_not_agy": "agy is for a research deliverable (a report to keep); a researcher answers a question the lead needs now"
     }
+  },
+
+  "choose": {
+    "_note": "Walk down in order; the first match decides.",
+    "1": "one lookup, one file, one edit, or a step that needs this session's context -> the lead does it",
+    "2": "the deliverable is an artifact produced from scratch, or the task matches one of agy's own skills -> artifact (agy-driver -> agy)",
+    "3": "self-contained, ends in a commit, has a check command, clean git checkout available -> execution_worker (glm-driver -> GLM)",
+    "4": "many files to read, one conclusion to return -> sweeper",
+    "5": "a section of a long deliverable from settled material -> drafter",
+    "6": "an in-flight code step that does not meet 3 -> implementer",
+    "7": "a finding to challenge -> verify; a diff to review -> review; a fact to look up in a primary source -> research"
+  },
+
+  "parallel": {
+    "execution": "worktree-only",
+    "rule": "Two GLM calls in one checkout collide: the second refuses on the first's dirty tree, or the drivers revert each other. Run parallel glm-drivers only with `isolation: worktree` in the Agent tool, one worktree and one branch per driver; the lead merges afterwards. Inside one checkout, one driver at a time.",
+    "ceiling": "CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS in the project environment; no other limit"
   },
 
   "workers": {
     "glm": {
-      "command": "python C:/Users/cupik/Desktop/agy-cc-proxy/GLM/glm-run.py",
-      "run_from": "any directory, with the command spelled exactly as above - the permission entry is matched against the command text, not the file on disk. The wrapper stays in the agy-cc-proxy repository so its history does",
+      "what": "Claude Code itself, started as a child process on the Z.AI endpoint. It reads this project's CLAUDE.md and AGENTS.md on its own, so the brief does not restate the contract.",
+      "command": "python C:/Users/cupik/.claude/bin/glm-run.py",
+      "installed_copy": "~/.claude/bin/glm-run.py - what the permission entry names and what runs",
+      "source": "glm-agy-cc-proxy/GLM/glm-run.py, the versioned original; after editing it, copy it over the installed copy",
+      "permission_entry": "Bash(python C:/Users/cupik/.claude/bin/glm-run.py:*) in ~/.claude/settings.json, matched against the command text, so spell it exactly",
       "model": "glm-5.3[1m]",
       "quota": "Z.AI",
-      "skill": "~/.claude/skills/glm/SKILL.md - a junction to .claude/skills/glm/ in agy-cc-proxy, which is where to edit it",
+      "skill": "glm - ~/.claude/skills/glm is a junction to .claude/skills/glm/ in glm-agy-cc-proxy; edit it there",
       "cost_tokens": {
         "_note": "input plus cache-read, measured 2026-09-15",
         "no_tools": 7400,
@@ -58,24 +149,25 @@
         "create_one_file": 35800,
         "large_multifile_task": 296600
       },
-      "cost_detail_large_task": "31 900 input + 264 800 cache-read + 17 500 output, 23 turns, 263 s, no shell. A nine-file, 210-line Python package: add a second input format to the parser, a section to the report, and tests for both. Seven files edited and one added, 14 tests to 33, every one passing on the first attempt with no repair turn. This is the figure to judge a delegation against - roughly seventeen times the tools floor.",
-      "cost_caveat": "total_cost_usd in the wrapper's report is not a Z.AI charge - Claude Code prices it from a table with no GLM entry."
+      "cost_detail_large_task": "31 900 input + 264 800 cache-read + 17 500 output, 23 turns, 263 s, no shell. A nine-file, 210-line Python package: add a second input format to the parser, a section to the report, and tests for both. Seven files edited and one added, 14 tests to 33, every one passing on the first attempt. This is the figure to judge a delegation against.",
+      "cost_caveat": "total_cost_usd in the wrapper's report is not a Z.AI charge - Claude Code prices it from a table with no GLM entry. Compare calls by tokens."
     },
     "agy": {
+      "what": "Google's Antigravity CLI, a separate agent with its own tools and skills, on a personal Google AI Pro account.",
       "command": "python C:/Users/cupik/.claude/bin/agy-run.py",
+      "permission_entry": "Bash(python C:/Users/cupik/.claude/bin/agy-run.py:*) in ~/.claude/settings.json",
       "quota": "personal Google AI Pro, refills every five hours",
-      "skill": "~/.claude/skills/agy/SKILL.md",
+      "skill": "agy - ~/.claude/skills/agy/SKILL.md",
       "cost_tokens": {
         "_note": "measured 2026-09-13",
         "floor": 17300,
         "read_one_file": 30000,
         "create_one_file": 44000,
         "large_multifile_task": 116000
-      }
+      },
+      "brief_leaves_the_machine": "the brief goes to a personal Google account; AGENTS.md rule 3 applies to it. The same is true of GLM and Z.AI."
     }
   },
-
-  "choose_between_workers": "GLM unless the job wants agy's own skills, or unless GLM's quota is the one you would rather not spend right now. agy's is the scarcer of the two.",
 
   "reserved": {
     "haiku": {
@@ -88,6 +180,7 @@
   },
 
   "unverified": {
-    "glm_is_opus_tier": "GLM fills the slot an opus-tier worker would otherwise hold. That is a routing decision, not a measured equivalence - nothing here has benchmarked GLM against Opus 5. Replace this entry with a number the day someone does."
+    "glm_vs_opus": "GLM holds the execution slot by decision, not by measurement - nothing here has benchmarked GLM against Opus 5 or Sonnet 5 on the same task. Replace this entry with a number the day someone does.",
+    "driver_loop_limit": "three worker calls per task is a starting value, not a measured optimum."
   }
 }

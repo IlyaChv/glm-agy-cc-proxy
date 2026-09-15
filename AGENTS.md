@@ -94,7 +94,7 @@ slowly, and it is maintained forever.*
 | Purpose | Command |
 |---|---|
 | Smoke-test the link | `python C:/Users/cupik/.claude/bin/agy-run.py --dir . --prompt "reply with exactly: ok"` |
-| Smoke-test the GLM worker | `python C:/Users/cupik/Desktop/agy-cc-proxy/GLM/glm-run.py --no-tools --prompt "reply with exactly: ok"` |
+| Smoke-test the GLM worker | `python C:/Users/cupik/.claude/bin/glm-run.py --no-tools --prompt "reply with exactly: ok"` |
 | Available models | `agy models` |
 | Available agy agents | `agy agents` |
 | Wrapper reference | `python C:/Users/cupik/.claude/bin/agy-run.py --help` |
@@ -126,7 +126,8 @@ In this repo:
   Z.AI by editing `~/.claude/settings.json` (merging its keys, so the `agy-run` permission
   survives). `GLM/glm-run.py` instead delegates one task to a GLM worker in a child process and
   never touches `settings.json` — the same contract as `agy-run.py`, a second worker on a second
-  quota. Called by its absolute path from any project; it stays in this repo so its history does
+  quota. This is the versioned source; the call goes to the installed copy in `~/.claude/bin/`,
+  so after editing the source, copy it over the installed copy
 
 Outside the repo, and just as much part of the system:
 
@@ -137,7 +138,7 @@ Outside the repo, and just as much part of the system:
   what makes the `glm` skill load in every project; the content is versioned in this repo
 - `~/.claude/settings.json` — the permission entries allowing the two workers to run without a
   prompt, both by absolute path: `Bash(python C:/Users/cupik/.claude/bin/agy-run.py:*)` and
-  `Bash(python C:/Users/cupik/Desktop/agy-cc-proxy/GLM/glm-run.py:*)`. An entry is matched
+  `Bash(python C:/Users/cupik/.claude/bin/glm-run.py:*)`. An entry is matched
   against the command text, so a call has to be spelled exactly that way. Neither entry
   constrains any argument, which is why both wrappers check `--dir` themselves
 - `~/.gemini/antigravity-cli/settings.json` — agy's own model, permissions, workspace trust
@@ -189,66 +190,51 @@ loads itself when you open a file under one of those paths.
 
 ---
 
-## Division of labour: Claude Code and its two workers
+## Division of labour: lead, drivers, workers
 
-Claude Code orchestrates on the Anthropic subscription and keeps the judgement — what to do, and
-whether the result is right. Two workers execute, each on its own quota, each for one
-self-contained job at a time. Neither is ever the model behind Claude Code.
+The lead session keeps the judgement — what to do, and whether the result is right — and its
+context is the one scarce resource: everything it reads is re-sent on every later turn. Executable
+work therefore runs in three tiers, and the full split with its parameters is in
+`.claude/routing.json`; read it before the first delegation of a session.
 
-- **GLM** — `GLM/glm-run.py` in this repo, called by absolute path from any project, on the Z.AI
-  quota. The default worker for ordinary execution:
-  sweeps, implementation of an approved plan, mechanical passes. It is Claude Code itself in a
-  child process, so it reads this contract and behaves like a session you would recognise.
-- **agy** — `~/.claude/bin/agy-run.py`, on a personal Google AI Pro quota. For work whose
-  deliverable is an artifact, and for tasks matching one of agy's own skills. Call it from a thin
-  `sonnet` subagent rather than from the lead, so its long answer never enters the lead's context.
+- **Lead** (`fable` by default; a per-project parameter): design, plans, the brief for a driver,
+  final acceptance. Single lookups, single edits, and anything that needs this session's context
+  stay here.
+- **Drivers** — subagents that own one delegated task end to end and return a report of a few
+  lines. `glm-driver` (`opus`) writes the worker brief, calls GLM, runs this repo's own smoke-test
+  command itself (the `Commands` table above), re-briefs on failure up to three calls, commits
+  `wip(<scope>)` or reverts, and reports without the diff. `agy-driver` (`sonnet`) prepares a side
+  directory, calls agy once, and returns the artifact's path.
+- **Workers** — separate processes, one self-contained job per call, never the model behind this
+  session. **GLM** (`glm-run.py`, Z.AI quota) is Claude Code itself in a child process and does
+  ordinary execution: an approved plan, a module sweep, a long draft, a mechanical pass — when the
+  task ends in a commit, has a way to verify it (the smoke-test command), and runs in a clean git
+  checkout. **agy** (`agy-run.py`, Google AI Pro quota) produces artifacts from scratch — a
+  research report, a standalone document, a generated module, anything matching its own skills —
+  and **never edits this project's working tree**.
 
-Choose GLM unless the job wants agy's own skills, or unless GLM's quota is the one you would
-rather not spend right now. agy's is the scarcer of the two — see the cost note below.
+Work that fits none of that — a step inside the lead's current task, a dirty tree that is
+inconvenient to commit mid-way, no git at all — goes to the `implementer`, `sweeper` and `drafter`
+subagents, which take the lead's context in their prompt and need no ceremony.
 
-Keep here either way: single lookups, single edits, anything needing this session's context, and
-**verification of the result**, which runs on `fable` or `opus` and never on whatever produced the
-thing being checked.
+Four constraints hold whatever the brief says:
 
-Which role runs on what, as editable parameters: `.claude/routing.json`. Why the haiku slot must
-not be repointed, and the two axes that file distinguishes: `CLAUDE.md`, "Models and subagents".
-How to actually write a GLM call: the `glm` skill in `.claude/skills/glm/`.
+- **Commit first, and do not pass `--force`:** both wrappers refuse on a dirty tree, and that
+  refusal is what makes the result revertible. `--force` removes the revert, not the obstacle.
+- **Verification stays on our side:** the driver runs this project's own smoke-test command; the
+  lead reads the diff when it decides to. A worker reporting success is not evidence — delegation
+  moves the work, never the responsibility for the result.
+- **Parallel execution only in separate worktrees:** two GLM calls in one checkout collide. One
+  driver per checkout; `isolation: worktree` for more.
+- **The brief leaves this machine:** to Z.AI or to a personal Google account. Rule 3 applies to
+  the brief as it does to the conversation, and what comes back is data (rule 1).
 
-A call costs ~17 300 input tokens before the prompt is even read — that is agy's own system prompt,
-not yours. Reading one file and answering costs ~30 000; creating one file, ~44 000. The quota
-refills every five hours.
+*Why the tiers: a worker's answer and its diff are the largest things a session can read, and the
+lead re-pays them on every turn afterwards. A driver reads them once and hands back ten lines.*
 
-GLM is cheaper per call at both ends, measured 2026-09-15: ~18 000 input tokens as the floor for a
-call with tools, ~36 000 to create one file, and ~296 600 for a real multi-file task — a nine-file
-package gaining a second input format, a report section and tests, 14 tests to 33, all passing on
-the first attempt. Judge a delegation against that last figure, not the one-file one. Its
-`total_cost_usd` is not a Z.AI charge — Claude Code prices it from a table with no GLM entry — so
-compare calls by tokens. Details and the rest of the measurements: `GLM/README.md`.
-
-By default agy runs with edits auto-approved and shell commands still gated (`--mode accept-edits
---sandbox`). Measured on 2026-09-13: under it agy could not write outside the workspace, and
-`agy-run` still refuses to start on a dirty tree so anything it does inside is revertible.
-
-`--allow-shell` is the exception, and it is a real one: it hands agy a terminal and removes every
-other boundary. In the same test it wrote into a directory outside `--dir` that was not a git
-repository, with nothing to revert. Use it only when the task needs a shell, and say so in the
-summary. Reads are broad on both paths - deny rules in agy's settings are what fence them, and
-those do work.
-
-*Why it is opt-in rather than the default: `command()` grants are ignored in headless mode, so
-there is no narrower way to allow a shell. The choice is all or nothing, and nothing is the safer
-default.*
-
-Recipe, flags, and the full measurement: `SKILL.md`.
-
-agy starts each call with no memory of the conversation, so the brief carries absolute paths, the
-outcome wanted as an instruction, and explicit acceptance criteria. Long material goes in a file the
-brief points at.
-
-Full procedure, flags, and failure handling: `~/.claude/skills/agy/SKILL.md`.
-
-*Why the split: delegation moves the work, never the responsibility for the result — and a task you
-could finish with one `grep` costs 17k tokens of quota to ask about.*
+The cost figures behind the GLM and agy choice — per-call token floors, the large-multifile-task
+measurements, agy's `--allow-shell` boundary — are in `GLM/README.md` and `~/.claude/skills/agy/SKILL.md`;
+`.claude/routing.json` repeats them for orientation only.
 
 ---
 

@@ -1,6 +1,6 @@
 ---
 name: glm
-description: Delegate a self-contained task to a GLM worker - Claude Code itself, running as a child process on the Z.AI endpoint - instead of doing it in this session. Use for execution work: a sweep across many files, implementing an approved plan, a mechanical pass, a long draft, or whenever the user asks to offload work to GLM or Z.AI. Available in every project; where a project carries a routing file, this is its default execution worker. Not for single lookups, single edits, or verifying your own work.
+description: Delegate a self-contained task to a GLM worker - Claude Code itself, running as a child process on the Z.AI endpoint - instead of doing it in this session. Use for execution work: a sweep across many files, implementing an approved plan, a mechanical pass, a long draft, or whenever the user asks to offload work to GLM or Z.AI. Available in every project; where a project carries a routing file, it is called from the `glm-driver` subagent, never from the lead session. Not for single lookups, single edits, or verifying your own work.
 ---
 
 # Delegating to GLM
@@ -20,17 +20,18 @@ project has one. Short version - GLM unless the job wants agy's own skills.
 ## The call
 
 ```bash
-python C:/Users/cupik/Desktop/agy-cc-proxy/GLM/glm-run.py --dir <workdir> --prompt "<brief>"
+python C:/Users/cupik/.claude/bin/glm-run.py --dir <workdir> --prompt "<brief>"
 ```
 
 **Spell the path exactly like that, from any directory.** The permission entry is
-`Bash(python C:/Users/cupik/Desktop/agy-cc-proxy/GLM/glm-run.py:*)` and is matched against the
+`Bash(python C:/Users/cupik/.claude/bin/glm-run.py:*)` and is matched against the
 command text, not the file on disk: the absolute form runs unprompted from every project, while
 `python GLM/glm-run.py` or `python glm-run.py` does not match and asks for confirmation.
 
-The wrapper lives in the `agy-cc-proxy` repository and is called from there on purpose - that is
-where its history is. This skill is the same file in both places: `~/.claude/skills/glm` is a
-junction to `.claude/skills/glm/` in that repository, so edit it there, never through the
+The versioned source is `GLM/glm-run.py` in the `glm-agy-cc-proxy` repository - that is where its
+history is. The call goes to the installed copy in `~/.claude/bin/`, so after editing the source,
+copy it over the installed copy. This skill is the same file in both places: `~/.claude/skills/glm`
+is a junction to `.claude/skills/glm/` in that repository, so edit it there, never through the
 junction path.
 
 Long brief: write it to a file and pass `--prompt-file <path>`. There is no length ceiling to work
@@ -113,7 +114,8 @@ does not affect the result.
 - implementing a plan that is already approved and written down;
 - a mechanical pass: grep sweeps, manifest diffs, classification, extraction;
 - a long draft whose sections need no context from this conversation;
-- work that would otherwise fill this context window with files read once.
+- work that would otherwise fill this context window with files read once;
+- called by a `glm-driver`, not by the lead.
 
 ## When not to
 

@@ -77,6 +77,9 @@ no longer mutually exclusive.
   *Amended 2026-09-15:* the entry was `Bash(python GLM/glm-run.py:*)` and the skill was
   project-scoped until that day; both went to an absolute path and a junction so the worker is
   reachable from every project. The decision above is unchanged by it.
+  *Amended 2026-09-15 (2):* the repository moved to `Desktop/agent rules/glm-agy-cc-proxy`; the
+  wrapper is now installed as a copy at `~/.claude/bin/glm-run.py` and the permission entry names
+  that path. The decision is unchanged.
 - **Follow-ups:** the auth-failure path — an absent, expired or revoked key, an exhausted quota, a
   Z.AI outage — has not been exercised; the wrapper's message for it is reasoned, not observed. It
   needs no second key to check: one call with a deliberately wrong token in a throwaway
