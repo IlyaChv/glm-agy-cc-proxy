@@ -277,7 +277,7 @@ is what makes it visible, since "nothing changed" after a write task is now prin
 ### Readiness check in the real project
 
 Everything up to here was tested in throwaway directories. These ran in
-`C:\Users\cupik\Desktop\agy-cc-proxy` itself, on a clean tree:
+`C:\Users\cupik\Desktop\agent rules\glm-agy-cc-proxy` itself, on a clean tree:
 
 - **Smoke test** (`--dir . --prompt "reply with exactly: ok"`) - returned `ok`, exit 0, tree
   unchanged. Definition of done, item 1, satisfied against the real repo.

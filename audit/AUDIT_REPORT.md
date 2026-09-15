@@ -1,6 +1,6 @@
 # Итоговый отчёт по аудиту кодовой базы
 
-Проект: `agy-cc-proxy` — связка Claude Code ↔ Antigravity CLI (`agy`).
+Проект: `glm-agy-cc-proxy` — связка Claude Code ↔ Antigravity CLI (`agy`).
 
 ## 0. Параметры прогона
 
