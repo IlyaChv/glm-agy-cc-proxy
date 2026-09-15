@@ -375,3 +375,29 @@ naming the tool and how to allow it», исправлено в 1.1.3, добав
   находки стоит читать как заявки с указанной уверенностью, а не как приговоры.
 - Решения, зафиксированные в ADR, и строки `known-problems.md` находками не считались. ADR в
   проекте пока ни одного; `known-problems.md` содержит только плейсхолдеры.
+
+---
+
+## Closure log — 2026-09-15
+
+- **SEC-1** — closed: Closed 2026-09-15 in 929032a: the guard's scope (tracked files inside --dir and --add-dir only) is now stated in --help and the module docstring, gitignored paths are listed before the run and changed paths after it.
+- **SEC-2** — closed: Recorded 2026-09-15 as a known limit in AGY/README.md; not closable from the wrapper.
+- **SEC-3** — closed: Closed 2026-09-15 in 929032a: check_dir_allowed is the floor under the permission entry, --force does not lift it, and --prompt-file is refused under the same forbidden directories.
+- **SEC-4** — closed: Closed 2026-09-15 in 929032a: gitignored paths in each working directory are printed before the run as being outside the safety net.
+- **SEC-5** — closed: Closed 2026-09-15 in 929032a: agy's stderr goes through echo_stderr, bounded and filtered as in glm-run.py.
+- **COR-2** — closed: Closed 2026-09-15 in 929032a: kill_tree ports glm-run.py's whole-process-tree kill on timeout.
+- **COR-3** — closed: Closed 2026-09-15 in 929032a: the payload is the last complete JSON object in stdout, parsed with json.JSONDecoder; raw.find("{") is gone.
+- **COR-4** — closed: Closed 2026-09-15 in 929032a: every decode of agy's output uses errors="replace" consistently, git() included.
+- **COR-5** — closed: Closed 2026-09-15 in 929032a: a AGY_BIN that is not an executable file exits with an error naming the value instead of falling back.
+- **COR-6** — closed: Closed 2026-09-15 in 929032a: --timeout-min <= 0 is an argparse error.
+- **COR-7** — closed: Closed 2026-09-15 in 929032a: the limit is measured on subprocess.list2cmdline(cmd), the quoted command line, not on the prompt's raw length.
+- **COR-8** — closed: Closed 2026-09-15 in 929032a: one note is written to stderr when replacement characters were introduced while decoding.
+- **DOC-3** — closed: Closed 2026-09-15 on agent/audit-agy-fixes: the duplicated sentences were removed from CLAUDE.md, which now points at the AGENTS.md section.
+- **DOC-4** — closed: Closed 2026-09-15 in 929032a: recorded in AGY/README.md that "delegation goes through the skill" is convention only, with no technical enforcement.
+- **DOC-6** — closed: Recorded 2026-09-15 as a known limit in AGY/README.md; not closable from the wrapper.
+- **DOC-7** — closed: Closed 2026-09-15 on agent/audit-agy-fixes: SKILL.md now states that an oversized inline --prompt hard-fails and is never auto-converted, and that the limit is the quoted command line.
+- **DOC-9** — closed: Closed 2026-09-15: docs/adr/ exists with ADR-001-glm-endpoint-in-child-environment.md and ADR-INDEX.md.
+- **DOC-10** — closed: Closed 2026-09-15 in 929032a: the template now reads "MR, or the branch name where the repo has no remote".
+- **DOC-11** — closed: Closed 2026-09-15 on agent/audit-agy-fixes: the skill's description now fires only for an artifact task handed to it by the agy-driver subagent.
+- **DOC-12** — closed: Closed 2026-09-15 in 929032a: AGENTS.md no longer presents agy-run.cmd as allow-listed wiring; it is a hand-typing shim that always prompts. No permission entry was added.
+- **ARC-3** — closed: Recorded 2026-09-15 as a known limit in AGY/README.md; not closable from the wrapper.

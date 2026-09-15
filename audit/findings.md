@@ -87,6 +87,7 @@ described, not narrower. Merged into SEC-2.
   paths, nothing can revert them, and the wrapper still reports a clean run.
 - fix: set `allowNonWorkspaceAccess: false`, and say in the docstring that the guarantee is scoped
   to `--dir`.
+- closed: Closed 2026-09-15 in 929032a: the guard's scope (tracked files inside --dir and --add-dir only) is now stated in --help and the module docstring, gitignored paths are listed before the run and changed paths after it.
 
 ### SEC-2 · agy's `permissions.allow` is bypassed today and too broad to be tomorrow's control
 - from: A3-6, A3-7, A3-8, A3-12, merged and re-framed by the lead
@@ -108,6 +109,7 @@ described, not narrower. Merged into SEC-2.
 - failure: whoever drops the blanket flag believing the allow-list is a meaningful boundary gets
   approximately the same blast radius they thought they had removed.
 - fix: reduce to the specific commands actually needed before relying on the list for anything.
+- closed: Recorded 2026-09-15 as a known limit in AGY/README.md; not closable from the wrapper.
 
 ### SEC-3 · An allow-listed call has unconstrained `--dir` and `--prompt`
 - from: the A3-1 verifier's residual risk (replaces the refuted claim)
@@ -127,6 +129,7 @@ described, not narrower. Merged into SEC-2.
 - fix: none free of cost. Either accept it and say so, or have `agy-run.py` require `--dir` to sit
   under an allow-listed root. Note that AGENTS.md rule 5 (never touch `oauth_creds.json`) is the
   only thing covering the worst case, and it is a policy, not a mechanism.
+- closed: Closed 2026-09-15 in 929032a: check_dir_allowed is the floor under the permission entry, --force does not lift it, and --prompt-file is refused under the same forbidden directories.
 
 ### SEC-4 · The clean-tree guard cannot see gitignored files
 - from: A1-2
@@ -142,6 +145,7 @@ described, not narrower. Merged into SEC-2.
   tree reads clean before and after; the file is gone with no history to restore it from.
 - fix: name the limit in the refusal text and the docstring. Actually protecting ignored files
   needs a backup step, which is larger than this script.
+- closed: Closed 2026-09-15 in 929032a: gitignored paths in each working directory are printed before the run as being outside the safety net.
 
 ### SEC-5 · agy's stderr is copied into the transcript unfiltered and unbounded
 - from: A3-9
@@ -157,6 +161,7 @@ described, not narrower. Merged into SEC-2.
 - failure: a tool call that errors near a credential echoes an argument or a path into the Claude
   Code transcript. AGENTS.md rule 3 treats that as compromise the moment it happens.
 - fix: cap the echoed length and name stderr as untrusted passthrough in the docstring.
+- closed: Closed 2026-09-15 in 929032a: agy's stderr goes through echo_stderr, bounded and filtered as in glm-run.py.
 
 ---
 
@@ -185,6 +190,7 @@ described, not narrower. Merged into SEC-2.
   while a process agy started keeps writing into `--dir`.
 - fix: on `TimeoutExpired`, kill the tree (`taskkill /PID <pid> /T /F`), which needs `Popen` to
   keep the pid.
+- closed: Closed 2026-09-15 in 929032a: kill_tree ports glm-run.py's whole-process-tree kill on timeout.
 
 ### COR-3 · `raw.find("{")` assumes stdout holds nothing but the payload
 - from: A1-5 · file: `~/.claude/bin/agy-run.py:183-192`
@@ -194,6 +200,7 @@ described, not narrower. Merged into SEC-2.
   mid-diagnostic and fails with a confusing message instead of reading the real payload. AGENTS.md
   itself notes this CLI is on a weekly cadence and its flags have already moved once.
 - fix: try `json.loads(raw)` whole first, fall back to the brace heuristic.
+- closed: Closed 2026-09-15 in 929032a: the payload is the last complete JSON object in stdout, parsed with json.JSONDecoder; raw.find("{") is gone.
 
 ### COR-4 · `git()` decodes with strict UTF-8 while the agy call does not
 - from: A1-6 · file: `~/.claude/bin/agy-run.py:56-59`
@@ -207,6 +214,7 @@ described, not narrower. Merged into SEC-2.
 - failure: a filename in `--dir` in a legacy codepage makes `git status` output undecodable; the
   user gets a raw `UnicodeDecodeError` traceback instead of one of the script's refusal messages.
 - fix: add `errors="replace"`.
+- closed: Closed 2026-09-15 in 929032a: every decode of agy's output uses errors="replace" consistently, git() included.
 
 ### COR-5 · A broken `AGY_BIN` override is silently ignored
 - from: A1-9 · file: `~/.claude/bin/agy-run.py:41-53`
@@ -216,6 +224,7 @@ described, not narrower. Merged into SEC-2.
 - failure: someone pins a specific agy build to avoid a known bug, mistypes the path, and silently
   runs a different build.
 - fix: warn to stderr before falling through.
+- closed: Closed 2026-09-15 in 929032a: a AGY_BIN that is not an executable file exits with an error naming the value instead of falling back.
 
 ### COR-6 · `--timeout-min` accepts zero and negative values
 - from: A1-11 · file: `~/.claude/bin/agy-run.py:107,162`
@@ -223,6 +232,7 @@ described, not narrower. Merged into SEC-2.
 - claim: `type=int` with no range check. `--timeout-min -10` yields `hard_limit = -570`, passed
   straight to `subprocess.run(timeout=...)`.
 - fix: one line — reject values `<= 0` after parsing.
+- closed: Closed 2026-09-15 in 929032a: --timeout-min <= 0 is an argparse error.
 
 ### COR-7 · The 30 000-char guard counts characters, not the quoted command line
 - from: A1-10 · file: `~/.claude/bin/agy-run.py:36-38,130-137`
@@ -233,12 +243,14 @@ described, not narrower. Merged into SEC-2.
   fails at OS level with an error the script does not explain.
 - fix: widen the margin, or say in the error text that quote-heavy briefs should use
   `--prompt-file` well before the limit.
+- closed: Closed 2026-09-15 in 929032a: the limit is measured on subprocess.list2cmdline(cmd), the quoted command line, not on the prompt's raw length.
 
 ### COR-8 · Invalid UTF-8 from agy is replaced with no indication
 - from: A1-7 · file: `~/.claude/bin/agy-run.py:169-170`
 - severity: **Low** · confidence: **Low** · effort: Low
 - claim: `errors="replace"` silently substitutes U+FFFD; nothing reports that the text was altered.
 - fix: warn once when `"\ufffd" in raw`.
+- closed: Closed 2026-09-15 in 929032a: one note is written to stderr when replacement characters were introduced while decoding.
 
 ### Noted, not a finding
 **A1-12** — the clean-tree check is a point-in-time guarantee; the tree can change between the
@@ -289,6 +301,7 @@ session's.
   a later edit to one copy diverges silently from the other.
 - fix: keep the criteria and the why in `AGENTS.md`; leave `CLAUDE.md` the model table and a
   pointer.
+- closed: Closed 2026-09-15 on agent/audit-agy-fixes: the duplicated sentences were removed from CLAUDE.md, which now points at the AGENTS.md section.
 
 ### DOC-4 · "Delegation runs through the skill" has no enforcement
 - from: A2-4 · files: `CLAUDE.md:40-42`; `~/.claude/settings.json:1-8`
@@ -299,6 +312,7 @@ session's.
   if the skill had been used, minus the cost and failure-mode framing, and nothing notices.
 - fix: say plainly that it is a convention with no technical gate, or move the cost and
   failure-handling guidance into `agy-run.py --help`, where it cannot be skipped.
+- closed: Closed 2026-09-15 in 929032a: recorded in AGY/README.md that "delegation goes through the skill" is convention only, with no technical enforcement.
 
 ### DOC-5 · The wrapper's docstring claim is contradicted by its own `--force` flag
 - from: A1-8 · file: `~/.claude/bin/agy-run.py:17-18,106,125-126`
@@ -326,6 +340,7 @@ session's.
   cover the project finds every delegated call breaking or silently losing tool access.
 - fix: decide which setting is the intended control and make the other consistent with it. Relevant
   to SEC-1's fix, so do them together.
+- closed: Recorded 2026-09-15 as a known limit in AGY/README.md; not closable from the wrapper.
 
 ### DOC-7 · `SKILL.md` implies oversized inline prompts are auto-converted; they hard-fail
 - from: A3-10 · files: `~/.claude/skills/agy/SKILL.md:19-20`; `agy-run.py:130-137`
@@ -338,6 +353,7 @@ is passed by path instead of inline, which costs agy an extra read - keep briefs
 - claim: that is true only when `--prompt-file` was used. An oversized `--prompt` exits with an
   error and makes no call at all.
 - fix: one sentence in `SKILL.md`.
+- closed: Closed 2026-09-15 on agent/audit-agy-fixes: SKILL.md now states that an oversized inline --prompt hard-fails and is never auto-converted, and that the limit is the quoted command line.
 
 ### DOC-8 · `known-problems.md` can never load
 - from: A2-2 · file: `.claude/rules/known-problems.md:1-5`
@@ -355,11 +371,13 @@ is passed by path instead of inline, which costs agy an extra read - keep briefs
 - claim: the template says the index "is the only place the list of decisions is maintained", and
   the contract points at `docs/adr/` as a live location. Neither exists.
 - fix: reword the template to "create it if absent", or scaffold an empty index.
+- closed: Closed 2026-09-15: docs/adr/ exists with ADR-001-glm-endpoint-in-child-environment.md and ADR-INDEX.md.
 
 ### DOC-10 · The task-brief template requires an MR in a repo with no remote
 - from: A2-6 · files: `docs/templates/task-brief.md:90-96`; `AGENTS.md:236-237`
 - severity: **Low** · confidence: **Medium** · effort: Low
 - fix: mark the MR line as applying only where the Git section names a remote.
+- closed: Closed 2026-09-15 in 929032a: the template now reads "MR, or the branch name where the repo has no remote".
 
 ### DOC-11 · The skill's description may fire on work that should stay in-session
 - from: A3-11 · file: `~/.claude/skills/agy/SKILL.md:3`
@@ -368,12 +386,14 @@ is passed by path instead of inline, which costs agy an extra read - keep briefs
   trigger the skill even when the human never mentioned delegating.
 - failure: a plain in-session sweep nudges toward a ~17k-token agy call nobody asked for.
 - fix: rephrase as one conjunction with the delegation request as the precondition.
+- closed: Closed 2026-09-15 on agent/audit-agy-fixes: the skill's description now fires only for an artifact task handed to it by the agy-driver subagent.
 
 ### DOC-12 · `agy-run.cmd` is documented as part of the wiring but is not allow-listed
 - from: A3-3 · files: `~/.claude/settings.json:5`; `AGENTS.md:121`
 - severity: **Low** · confidence: **High** · effort: Low
 - fix: state that the `.cmd` shim is for humans typing by hand and is deliberately not
   allow-listed.
+- closed: Closed 2026-09-15 in 929032a: AGENTS.md no longer presents agy-run.cmd as allow-listed wiring; it is a hand-typing shim that always prompts. No permission entry was added.
 
 ---
 
@@ -452,6 +472,7 @@ outside your active project directories. Set to off by default for safety.
 - failure: the one asset whose loss the project was built to avoid is guarded by a sentence.
 - fix: add a deny rule covering the credential paths, and prefer `--sandbox`, so the policy has a
   mechanism behind it.
+- closed: Recorded 2026-09-15 as a known limit in AGY/README.md; not closable from the wrapper.
 
 ### ARC-4 · The audit directory blocks delegation
 - from: lead

@@ -1,6 +1,6 @@
 ---
 name: agy
-description: Delegate a large self-contained task to the Antigravity CLI (agy) on the Google AI Pro quota instead of doing it in this session. Use when the user asks to delegate or offload work to agy, Antigravity or Gemini, for a task big and self-contained enough to be worth ~17k tokens of Google quota - a repo-wide sweep, a long draft, reading an unfamiliar codebase, or work that suits one of agy's own skills. Not for single lookups or single edits.
+description: How the agy-driver subagent delegates one artifact task to the Antigravity CLI (agy) on the Google AI Pro quota. Use when the agy-driver has been handed a task whose deliverable is a file or folder produced from scratch in a side directory - a research report with web search, a long standalone document, a generated module, or work matching one of agy's own skills - and the result comes back as a path. Not for in-session work, not for editing this project's working tree, and not for single lookups or single edits; ordinary execution that ends in a commit goes to the GLM worker instead.
 ---
 
 # Delegating to agy
@@ -22,11 +22,14 @@ the call is made by the `agy-driver` subagent, not by the lead session.
 python C:/Users/cupik/.claude/bin/agy-run.py --dir <workdir> --prompt "<brief>"
 ```
 
-Long brief: write it to a file first, then `--prompt-file <path>`. An inline `--prompt` over
-24 000 characters makes no call at all - the wrapper exits with an error telling you to use
-`--prompt-file` instead. The by-path fallback (a short "read this file" prompt, which costs agy an
-extra read) only happens when the brief was already passed as `--prompt-file` and is over that
-limit. Quote-heavy briefs should move to `--prompt-file` well before the limit.
+Long brief: write it to a file first, then `--prompt-file <path>`. What the wrapper measures is the
+**quoted command line** (`subprocess.list2cmdline`) against 32 767 - 512 chars, not the brief's raw
+length - Windows argv quoting expands embedded quotes and backslashes, so a quote-heavy brief
+overflows well before its character count suggests. Over that limit with an inline `--prompt`, the
+call is never made: the wrapper exits with an error naming the quoted length and telling you to use
+`--prompt-file`. **An inline brief is never auto-converted to a file.** The by-path fallback (a
+short "read this file" prompt, which costs agy an extra read) happens only when the brief was
+already passed as `--prompt-file`.
 
 | Flag | Use |
 |---|---|

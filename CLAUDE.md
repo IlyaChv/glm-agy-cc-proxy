@@ -137,17 +137,10 @@ Per-model notes (delete when not running that model):
 
 ## Delegating to workers
 
-A worker is called from its driver (`glm-driver`, `agy-driver`), and the driver loads the worker's
-skill — `glm` or `agy` — before the call, by convention, not an improvised `claude --print` or
-`agy -p` in Bash. Nothing technical enforces this: the permission entry approves the wrapper
-command itself whether or not the skill was loaded, and from any session.
-*Why: the skill carries what a call costs, how a hung call behaves, and the loop for verifying a
-delegated diff. Without it the first delegation is a guess made with someone's quota.*
+How a worker is called — from its driver, which loads the `glm` or `agy` skill first, and why
+that is convention rather than a gate — is in AGENTS.md, "Division of labour: lead, drivers,
+workers" and "Development rules"; the module map there records the installed wrappers and the
+skill junctions.
 
-Both skills are installed per machine, not per project: `~/.claude/skills/agy/` is a directory of
-its own; `~/.claude/skills/glm` is a junction to `.claude/skills/glm/` in the `glm-agy-cc-proxy`
-repository, so the skill has one source with history — edit it there, never through the junction.
-The wrappers are `~/.claude/bin/agy-run.py` and `~/.claude/bin/glm-run.py`; the latter is an
-installed copy of `glm-agy-cc-proxy/GLM/glm-run.py`, so after editing the source, copy it over.
 Where a project has neither worker installed, delete the driver roles from `routing.json` rather
 than leaving a route nobody can take.
