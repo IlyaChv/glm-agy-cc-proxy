@@ -37,7 +37,7 @@ already passed as `--prompt-file`.
 | `--prompt` / `--prompt-file` | the brief (mutually exclusive, one is required) |
 | `--model` | default `gemini-3.8-flash-high` (the wrapper's `DEFAULT_MODEL`); `agy models` for the current list |
 | `--effort` | `low` / `medium` / `high` |
-| `--agent` | one of agy's own agents: `Senior Developer`, `Technical Writer`, `UI Designer` |
+| `--agent` | one of agy's own agents (`agy agents` lists them), e.g. `Senior Developer` |
 | `--allow-shell` | let agy run terminal commands; needed for any shell work, and it removes every other boundary (see below) |
 | `--no-tools` | pure-reasoning prompt: no sandbox, no accept-edits, no skip-permissions. Not a read-only switch |
 | `--force` | skip the clean-tree check |
@@ -124,7 +124,8 @@ question you could answer with one `grep` costs 17k tokens of someone's quota to
 - one lookup, one file, one edit - cheaper and faster here;
 - anything needing the context already loaded in this session (agy starts blank every call);
 - a code change inside the project's working tree - that is the GLM worker's track (`glm-driver`),
-  or an `implementer` subagent; agy's `--dir` never points at the project;
+  or an `implementer` subagent; agy's `--dir` never points at the project, except the `--mode plan`
+  smoke test in `AGENTS.md`;
 - verifying your own work. Delegation moves the work, never the responsibility for the result.
 
 ## Writing the brief
@@ -206,14 +207,14 @@ that was a small project.
 
 ## Handling the result
 
-- Report the usage line to the user when a call is expensive or when two run in a row. They are
-  spending a quota that refills every five hours and cannot see it otherwise.
+- Put the usage line in your report to the lead when a call is expensive or when two run in a
+  row, so the user, who is spending a quota that refills every five hours, can see it.
 - **Do not retype a long answer into your reply.** What agy returned is already in your context once;
   typing it out again costs output tokens to produce and then rides along as input on every later
   turn. When the brief's deliverable is long - a draft, a report, a document - redirect stdout to a
   file in the session scratchpad (`> answer.md`; the wrapper forces UTF-8 on its own output, so
-  non-ASCII survives the redirect), hand that file to the user (`SendUserFile`, or name the path), and
-  keep your own message to the usage line plus two or three sentences. Read enough of it to verify the
+  non-ASCII survives the redirect), return that file's path in your report, and keep the
+  report to the usage line plus two or three sentences. Read enough of it to verify the
   result - that responsibility never moves - but checking it is not reproducing it. A short answer
   stays inline: a verdict or a list costs less said than sent.
 - Read what agy actually produced before believing the summary. Check `git diff` in `--dir`: it may

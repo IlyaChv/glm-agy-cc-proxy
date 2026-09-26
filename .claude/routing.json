@@ -47,12 +47,12 @@
       "why_opus": "the driver decides whether a result is acceptable or needs a re-brief; that is judgement, not mechanics, and it is the last check before the lead sees anything",
       "loop": {
         "max_worker_calls": 3,
-        "on_pass": "commit `wip(<scope>): ...` on the task branch",
+        "on_pass": "commit `wip(<scope>): ...` on the current branch (`master` in this repository)",
         "on_fail": "`git checkout .`, then a new brief that names the concrete failure - never the same brief again",
         "verification": "the driver runs the project's check command itself; the worker is told not to run it and not to claim it passed",
         "after_limit": "stop and report, even if the last attempt was close"
       },
-      "report_to_lead": "at most ten lines: what was done, the check command and its last line, what failed and why, worker calls and tokens spent, commit hash. No diff, no retelling of the worker's answer.",
+      "report_to_lead": "one line per item, nothing else: what was done, the check command and its last line, what failed and why, worker calls and tokens spent, commit hash. No diff, no retelling of the worker's answer.",
       "invoke": "Agent(subagent_type: \"glm-driver\")"
     },
 
@@ -86,9 +86,9 @@
       "model": "claude-opus-5-5",
       "model_note": "Sonnet 5.5 when it ships",
       "worker": "agy",
-      "boundary": "agy never edits the project's working tree. Its --dir is a side directory the driver prepares (a fresh git repository with the inputs copied in and committed, since the wrapper requires a clean git checkout). The driver checks that the artifact exists on disk and returns its path with a four-line report; bringing it into the project is the lead's decision, made as an ordinary edit.",
+      "boundary": "agy never edits the project's working tree. Its --dir is a side directory the driver prepares (a fresh git repository with the inputs copied in and committed, since the wrapper requires a clean git checkout). The driver checks that the artifact exists on disk and returns its path with a short report; bringing it into the project is the lead's decision, made as an ordinary edit.",
       "acceptance": "the lead spot-checks three cited claims against their sources before bringing a research artifact in",
-      "why_cheapest_model": "the driver has nothing to judge here - it prepares the side directory, calls at most twice (one retry after a fixable failure), and relays a path",
+      "why_this_model": "the driver has nothing to judge here - it prepares the side directory, calls at most twice (one retry after a fixable failure), and relays a path; claude-opus-5-5 is the cheapest model above the floor",
       "invoke": "Agent(subagent_type: \"agy-driver\") -> python C:/Users/cupik/.claude/bin/agy-run.py"
     },
 
@@ -171,7 +171,7 @@
       "availability_note": "An account, eligibility or region error from agy ('account is not eligible for Antigravity ... not available in your location') can be transient and costs no quota. The driver retries once and reports both outcomes as the first line of its report; the lead passes it to the human before doing anything else (AGENTS.md, 'Escalate to a human'). Rerouting the artifact work to a researcher or drafter subagent is the human's call, not the driver's.",
       "skill": "agy - ~/.claude/skills/agy is a junction to .claude/skills/agy/ in glm-agy-cc-proxy; edit it there",
       "cost_tokens": {
-        "_note": "measured 2026-09-13",
+        "_note": "input tokens only, measured 2026-09-13; with cache-read the large task is ~691 000 (GLM's figures above include cache-read)",
         "floor": 17300,
         "read_one_file": 30000,
         "create_one_file": 44000,

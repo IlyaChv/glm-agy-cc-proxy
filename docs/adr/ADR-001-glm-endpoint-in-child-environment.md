@@ -83,7 +83,10 @@ no longer mutually exclusive.
   Z.AI outage — has not been exercised; the wrapper's message for it is reasoned, not observed. It
   needs no second key to check: one call with a deliberately wrong token in a throwaway
   environment would settle it.
-  *Closed 2026-09-15:* a large multi-file task was measured end to end — ~296 600 input-side
+  *Partly observed 2026-09-26:* a 401 with a valid key, caused by the desktop host's
+  `CLAUDE_CODE_ENTRYPOINT` in the child environment (`GLM/README.md`, 401 section). An expired or
+  revoked key and an exhausted quota remain unexercised.
+- **Measured 2026-09-15:** a large multi-file task was measured end to end — ~296 600 input-side
   tokens, 263 s, 14 tests to 33 passing on the first attempt. Figures in `GLM/README.md` and
   `.claude/routing.json`.
 

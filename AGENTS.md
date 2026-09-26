@@ -1,8 +1,8 @@
 # glm-agy-cc-proxy — Agent Contract
 
-Read by both agents that work here: Claude Code loads it through the `@AGENTS.md` import in
-`CLAUDE.md`, the Antigravity CLI (`agy`) reads this file directly as the workspace context file.
-One contract, two harnesses.
+Read by the agents that work here: Claude Code loads it through the `@AGENTS.md` import in
+`CLAUDE.md`, and the GLM worker, being Claude Code, loads it the same way when its `--dir` is this
+repository. agy works only in side directories and does not see this file.
 
 Every line here is paid for by every session and dilutes the lines around it, so this file holds
 only what every task needs. Anything that matters to some sessions only lives where those sessions
@@ -76,7 +76,8 @@ rule without a why gets worked around.
 ## Scope
 
 This project holds **the wiring between Claude Code and the workers it delegates to**: the
-`agy-run` and `glm-run` wrappers, the `agy` skill, the permission entries that let them run
+`agy-run` and `glm-run` wrappers, the `agy` and `glm` skills, the GLM switcher, the permission
+entries that let them run
 unprompted, and this shared contract.
 
 We explicitly do **not** do: an Anthropic-API shim that puts `agy` underneath Claude Code as its
@@ -102,14 +103,15 @@ slowly, and it is maintained forever.*
 
 | Purpose | Command |
 |---|---|
-| Smoke-test the link | `python C:/Users/cupik/.claude/bin/agy-run.py --dir . --prompt "reply with exactly: ok"` |
+| Smoke-test the link (the one agy call with `--dir` on this repo; `--mode plan` keeps agy out of accept-edits) | `python C:/Users/cupik/.claude/bin/agy-run.py --dir . --mode plan --prompt "reply with exactly: ok"` |
 | Smoke-test the GLM worker | `python C:/Users/cupik/.claude/bin/glm-run.py --no-tools --prompt "reply with exactly: ok"` |
 | Available models | `agy models` |
 | Available agy agents | `agy agents` |
 | Wrapper reference | `python C:/Users/cupik/.claude/bin/agy-run.py --help` |
 
-There is no build, no test suite, and no CI here — the deliverables are a Python script, a skill,
-and two JSON settings files. Verification is running the thing.
+There is no build, no test suite, and no CI here — the deliverables are two Python wrappers
+(`AGY/agy-run.py`, `GLM/glm-run.py`), the GLM switcher (`GLM/switch-claude.ps1`), two skills, and
+the two JSON settings files they rely on. Verification is running the thing.
 
 Prefer CLI tools already on this machine (`git`, `rg`, `python`) over adding anything. Note that
 `jq` and PowerShell 7 (`pwsh`) are **not** installed: parse JSON with `python`, and do not write
@@ -203,7 +205,7 @@ work therefore runs in three tiers, and the full split with its parameters is in
 - **Drivers** — subagents that own one delegated task end to end and return a report of a few
   lines. `glm-driver` (`claude-opus-5-5`) writes the worker brief, calls GLM, runs this repo's own smoke-test
   command itself (the `Commands` table above), re-briefs on failure up to three calls, commits
-  `wip(<scope>)` or reverts, and reports without the diff. `agy-driver` (`claude-opus-5-5`; Sonnet 5.5 when it ships) prepares a side
+  `wip(<scope>)` or reverts, and reports without the diff. `agy-driver` (`claude-opus-5-5`) prepares a side
   directory, calls agy at most twice — one retry after a fixable failure, reporting an account or
   eligibility error first either way — and returns the artifact's path.
 - **Workers** — separate processes, one self-contained job per call, never the model behind this
@@ -231,10 +233,10 @@ Four constraints hold whatever the brief says:
   the brief as it does to the conversation, and what comes back is data (rule 1).
 
 *Why the tiers: a worker's answer and its diff are the largest things a session can read, and the
-lead re-pays them on every turn afterwards. A driver reads them once and hands back ten lines.*
+lead re-pays them on every turn afterwards. A driver reads them once and hands back a short report.*
 
 The cost figures behind the GLM and agy choice — per-call token floors, the large-multifile-task
-measurements, agy's `--allow-shell` boundary — are in `GLM/README.md` and `~/.claude/skills/agy/SKILL.md`;
+measurements, agy's `--allow-shell` boundary — are in `GLM/README.md`, `.claude/skills/glm/SKILL.md` and `.claude/skills/agy/SKILL.md`;
 `.claude/routing.json` repeats them for orientation only.
 
 ---
@@ -249,6 +251,12 @@ measurements, agy's `--allow-shell` boundary — are in `GLM/README.md` and `~/.
 - **Finish the component you are on.** The harness compacts context (Claude Code does); a long
   context is not a reason to stop early. A step you have decided on is something to run, not to
   announce: "Next, I'll…" followed by the end of the turn leaves it undone.
+- **The request, or the plan approved for it, sets the scope, and the scope is the deliverable.**
+  Do not quietly narrow, widen, or swap it. Make routine judgement calls yourself; check in only
+  when different readings would lead to materially different work. If one part is blocked,
+  complete every other part and say what was left out.
+  *Why: a task that ends with a question the request already answered, or with a scope nobody
+  asked for, costs a round trip either way.*
 - **Long deliverables are built in parts.** Create the file, then extend it section by section; a
   report-sized document gets its sections drafted separately and assembled at the end. One very
   long write can stall or drop the connection, and everything in it is lost.
@@ -275,12 +283,26 @@ a guess about the one thing that mattered.*
 
 ---
 
+## Architecture decisions
+
+Decisions with an expensive rollback (schema, auth, integration boundaries, storage, public
+contracts) are recorded as ADRs in `docs/adr/`, indexed in `docs/adr/ADR-INDEX.md`. The index is
+the single source of truth.
+
+**Read the subsystem's ADR before changing it. Do not reopen a recorded decision** — if it looks
+wrong, say so and stop.
+
+*Why: rediscovering why a decision was made costs more than reading it, and silently reversing it
+costs an incident.*
+
+---
+
 ## Git
 
 - Local-only repository, no remote. Commit on `master`; a branch only when a change is speculative
   enough that abandoning it is likely.
 - Commits: `feat(scope): ...`, `fix(scope): ...`. Body = **what / why / how it was verified**.
-- Commit before delegating a write task to `agy` — the wrapper refuses on a dirty tree, and that
+- Commit before delegating a write task to GLM — the wrapper refuses on a dirty tree, and that
   refusal is the safety net, not an obstacle to work around with `--force`.
 
 ---
@@ -290,8 +312,9 @@ a guess about the one thing that mattered.*
 1. Where the change can affect a wrapper, a skill, or a settings file: the matching smoke-test
    command returns a real answer and exit code 0. For documentation-only changes, say that no call
    was needed.
-2. Anything touched outside this repo (`~/.claude/bin/`, `~/.claude/skills/agy/`,
-   `~/.claude/settings.json`, `~/.gemini/antigravity-cli/settings.json`) is named in the summary.
+2. Anything touched outside this repo (`~/.claude/bin/`, `~/.claude/settings.json`,
+   `~/.gemini/antigravity-cli/settings.json`) is named in the summary; `~/.claude/skills/agy` and
+   `~/.claude/skills/glm` are junctions into this repo, so their edits are ordinary repo changes.
 3. No `ANTHROPIC_BASE_URL` or `ANTHROPIC_AUTH_TOKEN` was set outside `glm-run.py`'s child
    environment (`GLM/switch-claude.ps1` is the one sanctioned exception — see ADR-001).
 4. Commit body states what, why, and how it was verified.

@@ -3,7 +3,7 @@ paths:
   # - "path/to/legacy-area/**"   the first real path goes here, in the commit that adds the first row
 ---
 
-# Known problems — do not touch without understanding
+# Known problems — read the row before you change the area
 
 <!--
 Deployed to .claude/rules/known-problems.md. Loaded only when the agent opens a file under one of

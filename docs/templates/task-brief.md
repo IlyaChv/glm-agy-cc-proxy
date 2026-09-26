@@ -10,8 +10,8 @@ Test before sending: show the brief to a colleague with no context on the task. 
 confused, the agent will be too. Say what to do, not only what to avoid; give the reason where a
 rule looks arbitrary. Describe the outcome you need, not a step-by-step thinking procedure — the
 model plans better than a hand-written plan. Do not ask for the reasoning to be written out in the
-reply either: effort sets how much the model thinks, and on Opus 5.5 such a request can be refused
-as `reasoning_extraction`.
+reply either: effort sets how much the model thinks, and on Fable 5.1 and Opus 5.5 such a request can be
+refused as `reasoning_extraction`.
 
 Order matters: long material (specs, logs, contract excerpts) goes at the top, the task and the
 criteria at the bottom. Quality drops when the question is buried above a wall of data.
@@ -31,7 +31,7 @@ Decisions in these documents are settled (`AGENTS.md`, "Architecture decisions")
 <!-- Long excerpts go right here, so the agent can tell material from instructions. Wrap each
 verbatim excerpt in a <pasted_content> block whose opening and closing tags carry the same short
 random id, a new id per block, each tag on its own line; the source goes on the line above it.
-Fill the block below, or delete it if the task has no long material.
+AGENTS.md rule 1 tells the agent what the block means. Fill the block below, or delete it if the task has no long material.
 
 For a long excerpt, ask in the Task section for the relevant lines to be quoted back first (in
 <quotes> tags) before the work starts. Ready to paste into the Task section: "Before you start,
@@ -94,7 +94,7 @@ Shared-system writes, deployments, new dependencies, schema changes: prepare, th
 
 ## State across sessions
 
-- Progress notes: `<docs/progress/<task>.md>` — update before the context is compacted or the
+- Progress notes: `docs/progress.md` — update before the context is compacted or the
   session ends; a fresh session starts by reading this file and `git log`.
 - Structured status (if the task has many parts): `<tests.json / checklist file>`.
 

@@ -18,8 +18,8 @@ Wording: say what to do, not only what to avoid ("Fetch the schema from /openapi
 writing types" beats "Never guess types"). Plain, specific language — no "ALWAYS", "NEVER",
 "CRITICAL": current models over-trigger on shouted rules and start asking about everything.
 
-The frontmatter is the shape Claude Code's auto-memory uses, so the same file works in the repo's
-`docs/memory/` (with its `MEMORY.md` index, created at install) and in the agent's own memory
+The frontmatter is the shape Claude Code's auto-memory uses, so the same file works in a repo's
+`docs/memory/` where the project keeps one (with its `MEMORY.md` index) and in the agent's own memory
 directory.
 
 Length: cover the substance and stop — no filler sections, no restating the rule in "How to
@@ -33,8 +33,8 @@ Delete this comment block.
 **Why:** <the actual incident: what broke, how it was found, what it cost — hours, an outage, a
 rollback, a customer.>
 
-**How to apply:** <when this situation occurs, do exactly this. Include the command, the file, or
-the check.>
+**How to apply:** <when this situation occurs, what to do: the exact command, file or check where
+one exists, the deciding question where it is a judgement call.>
 
 **Example (optional):** <one real case, verbatim — the input that triggered it and the correct
 response. Real material only; wrap in <example> tags if the entry is pasted into a prompt.>

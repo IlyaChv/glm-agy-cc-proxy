@@ -123,7 +123,7 @@ does not affect the result.
 - anything needing the context already loaded in this session (the worker starts blank every call);
 - a change with no mechanical way to check it. Verification is the safety net, and "the diff looks
   right" is not one;
-- **verifying your own work, or GLM's.** Re-verification runs on `fable` or `opus`, never on
+- **verifying your own work, or GLM's.** Re-verification runs on `fable` or `claude-opus-5-5`, never on
   whatever produced the thing. Delegation moves the work, never the responsibility for the result.
 
 ## Writing the brief
@@ -190,7 +190,7 @@ Raise `--timeout-min` above the default 10 for multi-file work.
   context once; typing it out again costs output tokens and then rides along as input on every
   later turn. For a long deliverable, redirect stdout to a file in the session scratchpad
   (`> answer.md`; the wrapper forces UTF-8 on its own output, so non-ASCII survives the redirect),
-  hand that file to the user, and keep your message to the cost line plus a few sentences.
+  return that file's path in your report, and keep the report to the cost line plus a few sentences.
 - Report the cost line when a call is expensive or when two run in a row.
 - Check `git diff` in `--dir` before believing the summary: the worker may have edited files even
   on a task phrased as a question.
@@ -206,7 +206,7 @@ retry once to tell transient from blocked.
 |---|---|
 | `N tool call(s) were denied rather than prompted for` | the task needed a permission the default posture does not grant. If it genuinely needs a terminal, re-run with `--allow-shell`; otherwise narrow the brief |
 | `the worker produced no output at all` | a stub `claude.exe` (`claude --version` fails) or a failure the payload never recorded; read the stderr above it rather than trusting the wording |
-| `api_error_status=401` and `401 token expired or incorrect`, after ~5 minutes | an auth error: report it to the user at once. Observed 2026-09-26 with a valid key, caused by the desktop app's `CLAUDE_CODE_ENTRYPOINT` leaking into the child; the wrapper now drops it. If it recurs, the installed copy in `~/.claude/bin` may predate that fix - say so rather than asking for a new key |
+| `api_error_status=401` and `401 token expired or incorrect`, after ~5 minutes | an auth error: report it at once. With a valid key the known cause is the desktop app's `CLAUDE_CODE_ENTRYPOINT` reaching the child, which `child_env()` in `GLM/glm-run.py` drops; if it appears, check whether the installed copy in `~/.claude/bin` matches the source and say so rather than asking for a new key |
 | `did not return within Ns` | a stuck tool call, not a slow model - the worker's own request timeout is far longer. Narrow the task or raise `--timeout-min` deliberately |
 | `exited N despite reporting success` | the child died after flushing output; the answer may be truncated. Treat the run as failed |
 | `spawned N subagent(s) despite the depth cap` | the cap is not holding. Tell the user - this is a change in the tool, not a task problem |

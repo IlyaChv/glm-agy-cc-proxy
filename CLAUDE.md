@@ -21,9 +21,12 @@ Only harness-specific behaviour goes here; project rules stay in AGENTS.md. Each
 "what + why", in the same calm wording. Delete the lines that do not apply to this repo.
 -->
 
-- **Progress text for the human.** Before the first tool call, say in a line what you are about
-  to do. While working, a brief update when you find something important or change direction.
-  Close with a recap that stands on its own: what was found, what was done, what is next.
+- **Progress text for the human (lead session on Fable 5.1).** Before the first tool call, say in
+  a line what you are about to do. While working, a brief update when you find something important
+  or change direction. Close with a recap that stands on its own: what was found, what was done,
+  what is next. On Opus 5.5 keep only the shape — it writes short progress notes between tool
+  calls on its own: one line of intent before the first tool call, and a final message that leads
+  with the outcome.
   *Why: Fable 5.1 writes little between tool calls; without it a long run is a black box until it
   ends, and a wrong turn is caught an hour late.*
 - **Batch independent tool calls.** First list privately what you need next, then request every
@@ -34,18 +37,20 @@ Only harness-specific behaviour goes here; project rules stay in AGENTS.md. Each
   that change; rewrite a file only when it is short or most of it changes.
   *Why: a rewrite of a long file costs output tokens and time and hides the actual diff in review.*
 - **Plan mode before changing anything under `~/.claude/`** — every file there, including
-  `settings.json`, `bin/agy-run.py`, `bin/glm-run.py`, `skills/agy/`, `skills/glm/` and `agents/`.
-  *Why: they live outside this repository and outside its history, and a broken `settings.json`
+  `settings.json`, `bin/agy-run.py`, `bin/glm-run.py` and `agents/`. `skills/agy/` and
+  `skills/glm/` are junctions into this repository: edit them at `.claude/skills/<name>/` here, as
+  ordinary repo changes.
+  *Why: the rest live outside this repository and outside its history, and a broken `settings.json`
   degrades every Claude Code session on this machine, not just this project.*
 - **Write files with the Write and Edit tools, never with a shell heredoc.** `cat > file <<'EOF'`
   and PowerShell here-strings are not reliable here: the call fails with an unexpected-EOF parse
   error and leaves nothing written, and long content with quotes or apostrophes triggers it.
   *Why: the failure reads like a shell syntax problem, so the lost write is easy to miss and the
   retry costs the whole file again.*
-- **Long documents are built in parts.** Create the file with its first section and extend it with
-  further edits; hand the reader the path rather than reprinting the document in the chat.
-  *Why: one very long write can stall the turn or drop the connection, and everything in it is
-  lost — including the reasoning that produced it.*
+- **Long documents: one section per subagent, each writing its own file, assembled at the end.**
+  The rule itself is in AGENTS.md, "Long tasks and session boundaries"; the harness part is here —
+  never print a long document into the chat as well as writing it.
+  *Why: sections draft in parallel, and no single write is long enough to stall the turn.*
 - **Scratch files go to the session scratchpad**, not into the repo. Remove any temporary file you
   create for iteration at the end of the task.
   *Why: a scratch file in the tree ends up in the diff, and the reviewer cannot tell it from the
@@ -74,6 +79,12 @@ The observable sign that the triggers are not firing: this session has read more
 of files for one question and no subagent has run yet. Delegate the next sweep instead of reading
 it here.
 
+A session or role running on Opus 5.5 leans the other way (observed on Opus 5; re-test on 5.5) and
+needs the opposite reminder: delegate only for large tasks that are genuinely independent and
+parallelizable, such as a wide multi-file investigation; do not delegate work you can finish
+yourself in a handful of tool calls, and do not use subagents to verify or double-check your own
+work. If one subagent can complete the task, use one rather than several, and keep spawn counts low.
+
 Spawn subagents in the background and keep working on independent parts; wait only when the next
 step needs their result. If one subagent can do the task, use one rather than several.
 
@@ -100,19 +111,18 @@ the file to edit when the split should change, and the file to copy into a proje
 different one. Roles (`model-table-rev: 2026-09-26`): `glm-driver`, `reviewer`, `agy-driver`,
 `implementer`, `sweeper`, `drafter` (all `claude-opus-5-5`), `researcher` (fable), `verifier`
 (fable; `claude-opus-5-5` for fable's findings). The model floor is generation 5.1: Opus 5,
-Sonnet 5 and Haiku 4.5 are not used. When Sonnet 5.5 and Haiku 5.5 ship, the sonnet-class roles
-(`agy-driver`, `implementer`, `sweeper`, `drafter`) move to Sonnet 5.5 and Haiku 5.5 becomes
-assignable for the cheapest mechanical work. The why of each pairing is in the role's frontmatter
+Sonnet 5 and Haiku 4.5 are not used; `model_policy` in the routing file says what changes when
+newer models ship. The why of each pairing is in the role's frontmatter
 and body.
 *Why data rather than a table here: routing is a per-project decision, this file is a shared
 contract. A table here gets quietly rewritten by whoever needs a different answer today, and the
 change lands on every project at once.*
 
 Two axes live in that file and are not interchangeable: a **subagent model** is picked from
-`fable | claude-opus-5-5` (Sonnet 5.5 and Haiku 5.5 join when they ship) and is started with the
+`fable | claude-opus-5-5` and is started with the
 Agent tool; a **worker** (GLM, agy) is a separate process reached through a wrapper in Bash, from
-a driver subagent. GLM has no subagent form — `model: "glm"` matches nothing. Until Haiku 5.5,
-haiku is only the harness's own reserved slot, not a role to assign (below, "Do not repoint the
+a driver subagent. GLM has no subagent form — `model: "glm"` matches nothing. The `haiku`
+alias is only the harness's own reserved slot, not a role to assign (below, "Do not repoint the
 haiku slot").
 
 **Do not repoint the haiku slot.** It is not a role you assign; the harness calls it for its own
@@ -130,19 +140,23 @@ than the routine.
 
 Hard caps live outside the prompt: `CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH`,
 `CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS` and `CLAUDE_CODE_MAX_SUBAGENTS_PER_SESSION` in the project
-environment. `…SPAWN_DEPTH` and `…CONCURRENT_SUBAGENTS` are documented on the Opus 5 prompting
-page, and the Agent SDK adds `max_budget_usd`; `…SUBAGENTS_PER_SESSION` is seen only in the binary
-(`grep -a`). Claude Code runs at its latest release here, so re-check all three against the current
-binary at each revision. Set them
-as a ceiling, not as a target — a cap that blocks a normal fan-out does not save the work, it
+environment, set as a ceiling, not as a target — a cap that blocks a normal fan-out does not
+save the work, it
 moves it into this session where it is re-sent every turn.
 *Why: a cap in the prompt is advisory; a cap in the environment holds when the model disagrees.*
+<!-- Maintainer note: `…SPAWN_DEPTH` and `…CONCURRENT_SUBAGENTS` are documented on the Opus 5
+prompting page, and the Agent SDK adds `max_budget_usd`; `…SUBAGENTS_PER_SESSION` is seen only in
+the binary (`grep -a`). Claude Code runs at its latest release, so re-check all three against the
+current binary at each revision. -->
+
+**Opus roles: keep outputs reasonably concise.** Match the length of a written document to what
+the task needs: cover the substance, do not pad with filler sections, redundant summaries, or
+boilerplate. Effort does not shorten a visible reply; only this instruction does.
 
 <!--
 Per-model notes (delete when not running that model):
 - Opus 5.5 as lead (notes observed on Opus 5; re-test): remove any "verify your work" / "double-check" / "use a subagent to verify"
-  lines — it verifies on its own, and the instruction causes over-verification. Add
-  "keep outputs reasonably concise" — effort does not shorten its visible replies.
+  lines — it verifies on its own, and the instruction causes over-verification.
   On delegation it can sit at either extreme, so tune to what you actually see: spawning agents
   for trivia means the damping above is too weak, while doing every sweep in-session means the
   triggers are not firing and any leftover "delegate sparingly" wording should go.
