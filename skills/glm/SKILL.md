@@ -1,6 +1,6 @@
 ---
 name: glm
-description: Delegate a self-contained task to a GLM worker - Claude Code itself, running as a child process on the Z.AI endpoint - instead of doing it in this session. Use for execution work: a sweep across many files, implementing an approved plan, a mechanical pass, a long draft, or whenever the user asks to offload work to GLM or Z.AI. Available in every project; where a project carries a routing file, it is called from the `glm-driver` subagent, never from the lead session. Not for single lookups, single edits, or verifying your own work.
+description: Delegate a self-contained task to a GLM worker - Claude Code itself, running as a child process on the Z.AI endpoint - instead of doing it in this session. Use for execution work: a sweep across many files, implementing an approved plan, a mechanical pass, a long draft, or whenever the user asks to offload work to GLM or Z.AI. Loaded by the `workers:glm-driver` subagent, which makes the call; the lead session never calls the wrapper itself. Not for single lookups, single edits, or verifying your own work.
 ---
 
 # Delegating to GLM
@@ -14,25 +14,22 @@ restate the contract.
 This session stays the orchestrator: it writes the brief and reads the result. GLM is never the
 model behind Claude Code - it is a worker called for one job at a time.
 
-Which work goes to GLM rather than to agy or to a model here: `.claude/routing.json`, if the
-project has one. Short version - GLM unless the job wants agy's own skills.
+Which work goes to GLM rather than to agy or to a model here: the `workers:workers` skill. Short
+version - GLM unless the job wants agy's own skills.
 
 ## The call
 
 ```bash
-python C:/Users/cupik/.claude/bin/glm-run.py --dir <workdir> --prompt "<brief>"
+python "${CLAUDE_PLUGIN_ROOT}/GLM/glm-run.py" --dir <workdir> --prompt "<brief>"
 ```
 
-**Spell the path exactly like that, from any directory.** The permission entry is
-`Bash(python C:/Users/cupik/.claude/bin/glm-run.py:*)` and is matched against the
-command text, not the file on disk: the absolute form runs unprompted from every project, while
-`python GLM/glm-run.py` or `python glm-run.py` does not match and asks for confirmation.
+**Spell the command exactly like that, from any directory** — the path is filled in when this
+skill loads. Permission entries match the command text, so a different spelling of the same path
+asks for confirmation.
 
-The versioned source is `GLM/glm-run.py` in the `glm-agy-cc-proxy` repository - that is where its
-history is. The call goes to the installed copy in `~/.claude/bin/`, so after editing the source,
-copy it over the installed copy. This skill is the same file in both places: `~/.claude/skills/glm`
-is a junction to `.claude/skills/glm/` in that repository, so edit it there, never through the
-junction path.
+This skill, the wrapper and the driver roles are the `workers` plugin: the `glm-agy-cc-proxy`
+repository, loaded in place through the junction `~/.claude/skills/workers`. Edit them in the
+repository; `/reload-plugins` picks the change up.
 
 Long brief: write it to a file and pass `--prompt-file <path>`. There is no length ceiling to work
 around - the brief goes to the worker on stdin, not in the command line - so `--prompt-file` is
@@ -210,7 +207,7 @@ retry once to tell transient from blocked.
 |---|---|
 | `N tool call(s) were denied rather than prompted for` | the task needed a permission the default posture does not grant. If it genuinely needs a terminal, re-run with `--allow-shell`; otherwise narrow the brief |
 | `the worker produced no output at all` | a stub `claude.exe` (`claude --version` fails) or a failure the payload never recorded; read the stderr above it rather than trusting the wording |
-| `api_error_status=401` and `401 token expired or incorrect`, after ~5 minutes | an auth error: report it at once. With a valid key the known cause is the desktop app's `CLAUDE_CODE_ENTRYPOINT` reaching the child, which `child_env()` in `GLM/glm-run.py` drops; if it appears, check whether the installed copy in `~/.claude/bin` matches the source and say so rather than asking for a new key |
+| `api_error_status=401` and `401 token expired or incorrect`, after ~5 minutes | an auth error: stop and report it at once, without retrying — the user fixes accounts by hand. With a valid key a host-session variable reaching the child was the known cause; `child_env()` in `GLM/glm-run.py` now drops every `ANTHROPIC_*` and `CLAUDE_CODE_*` it did not set itself |
 | `did not return within Ns` | a stuck tool call, not a slow model - the worker's own request timeout is far longer. Narrow the task or raise `--timeout-min` deliberately |
 | `exited N despite reporting success` | the child died after flushing output; the answer may be truncated. Treat the run as failed |
 | `spawned N subagent(s) despite the depth cap` | the cap is not holding. Tell the user - this is a change in the tool, not a task problem |

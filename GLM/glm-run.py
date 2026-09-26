@@ -10,7 +10,7 @@ process with the Z.AI variables set **only in that child's environment** and
 never touches `settings.json` at all. Nothing outside the call is affected, so
 the orchestrating session keeps running on the Anthropic subscription.
 
-It is the same shape as `~/.claude/bin/agy-run.py`: one brief in, one answer out,
+It is the same shape as `AGY/agy-run.py`: one brief in, one answer out,
 the cost of the call on stderr, and a clean-tree guard so the worker's edits are
 always revertible. The differences from agy-run are forced by the tool:
 

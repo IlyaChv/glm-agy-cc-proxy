@@ -119,15 +119,16 @@
 переключатель ни оставил файл, адрес эндпоинта для вызова решается внутри `glm-run.py`.
 
 ```
-python C:/Users/cupik/.claude/bin/glm-run.py --dir . --prompt "..."
-python C:/Users/cupik/.claude/bin/glm-run.py --dir . --prompt-file brief.txt --timeout-min 20
-python C:/Users/cupik/.claude/bin/glm-run.py --no-tools --prompt "..."     # без инструментов, чистое рассуждение
+python "C:/Users/cupik/.claude/skills/workers/GLM/glm-run.py" --dir . --prompt "..."
+python "C:/Users/cupik/.claude/skills/workers/GLM/glm-run.py" --dir . --prompt-file brief.txt --timeout-min 20
+python "C:/Users/cupik/.claude/skills/workers/GLM/glm-run.py" --no-tools --prompt "..."     # без инструментов, чистое рассуждение
 ```
 
-Звать по абсолютному пути к установленной копии, из любого каталога: почему — в разделе
-«Установленные копии и junction-ссылки» ниже.
+Драйвер зовёт то же самое как `python "${CLAUDE_PLUGIN_ROOT}/GLM/glm-run.py" ...`. Путь через
+junction плагина без вопросов проходит из любого каталога: почему — в разделе «Плагин, junction
+и разрешения» ниже.
 
-Контракт тот же, что у `~/.claude/bin/agy-run.py`: один бриф внутрь, один ответ в stdout,
+Контракт тот же, что у `AGY/agy-run.py`: один бриф внутрь, один ответ в stdout,
 стоимость вызова в stderr, `exit 0` только при успехе. Отличия вынуждены самим инструментом:
 
 - **бриф идёт в stdin, а не в argv.** `claude --print` читает stdin, когда позиционный промпт не
@@ -160,7 +161,8 @@ python C:/Users/cupik/.claude/bin/glm-run.py --no-tools --prompt "..."     # б�
 ### Что стоит вызов
 
 Замеры (пустой вызов, вызов с инструментами, создание файла, настоящая многофайловая задача) —
-в `.claude/routing.json`, `workers.glm.cost_tokens` и `workers.agy.cost_tokens`. Вывод из них:
+в скиллах `glm` и `agy`, раздел «What a call costs» (`skills/glm/SKILL.md`,
+`skills/agy/SKILL.md`). Вывод из них:
 делегирование оценивается по цене реальной многофайловой задачи (~296 600 токенов input плюс
 cache-read, примерно в семнадцать раз больше порога вызова с инструментами), а не по цене создания
 одного файла.
@@ -187,22 +189,28 @@ cache-read, примерно в семнадцать раз больше пор�
 Если 401 вернётся, сначала проверьте ключ прямым запросом, а не пересоздавайте его: ошибка
 одинаково выглядит и для просроченного ключа, и для подменённого токена.
 
-## Установленные копии и junction-ссылки
+## Плагин, junction и разрешения
 
-Три пути вне этого репозитория — и при этом часть той же системы:
+Этот репозиторий — плагин Claude Code `workers`. Установленных копий обёртки нет: вызов идёт
+прямо в `GLM/glm-run.py` этого репозитория. Вне репозитория — два пути, и оба часть той же системы:
 
-- `~/.claude/bin/glm-run.py` — установленная копия `GLM/glm-run.py`. Вызов всегда идёт в неё,
-  поэтому после правки исходника копию нужно обновить: `python tools/install.py machine` в
-  `agent rules`, затем `python tools/check.py` там же. История версий — только у исходника здесь.
-- `~/.claude/skills/glm` — junction на `.claude/skills/glm/` этого репозитория, не отдельный
-  файл. Именно он делает скилл `glm` видимым во всех проектах; содержимое версионируется здесь
-  и правится только здесь, не через junction.
-- `~/.claude/settings.json` — разрешения `Bash(python C:/Users/cupik/.claude/bin/glm-run.py:*)` и
-  `Bash(python C:/Users/cupik/.claude/bin/agy-run.py:*)` в `permissions.allow`. Запись сверяется
-  с текстом команды, а не с файлом на диске, поэтому вызов пишется ровно так: абсолютный путь к
-  установленной копии проходит без вопросов из любого проекта, а `python GLM/glm-run.py` из корня
-  репозитория или `python glm-run.py` изнутри `GLM/` тексту не соответствуют, и подтверждение
-  спросят. Аргументы запись не ограничивает, поэтому обёртка сама проверяет `--dir`.
+- `~/.claude/skills/workers` — junction на этот репозиторий. Через него Claude Code грузит плагин
+  на месте как `workers@skills-dir`; по умолчанию он выключен и включается в проекте командой
+  `python tools/install.py workers <проект> on` в `agent rules` (`off` — выключить). Скиллы
+  `workers:glm` и остальные видны только там, где плагин включён. Содержимое правится здесь, не
+  через junction; после правки — `/reload-plugins`.
+- `~/.claude/settings.json` — в `permissions.allow` записи на команды
+  `python "C:/Users/cupik/.claude/skills/workers/GLM/glm-run.py"`,
+  `python "C:/Users/cupik/.claude/skills/workers/AGY/agy-run.py"` и
+  `python "C:/Users/cupik/.claude/skills/workers/scripts/check.py"`, в прямых и обратных слэшах.
+  Запись сверяется с текстом команды, а не с файлом на диске, поэтому путь через junction
+  проходит без вопросов из любого проекта, а `python GLM/glm-run.py` из корня репозитория или
+  `python glm-run.py` изнутри `GLM/` тексту не соответствуют, и подтверждение спросят. Аргументы
+  запись не ограничивает, поэтому обёртка сама проверяет `--dir`.
+
+Проверить оба воркера разом — `/workers:check` в сессии или `python scripts/check.py` в корне
+репозитория: по одному крошечному вызову каждого, строка `OK`, `ACCOUNT` или `DOWN` на воркер.
+Для ручного теста обёртку можно звать и напрямую, как в примерах выше.
 
 ## Проверка, что режим действительно сменился
 

@@ -1,0 +1,7 @@
+{
+  "name": "workers",
+  "description": "External workers for Claude Code: GLM (Claude Code on the Z.AI endpoint) and agy (Google's Antigravity CLI), with driver subagents, an availability check at session start, and immediate notice of account errors. Enable per project.",
+  "version": "1.0.0",
+  "author": {"name": "cupik"},
+  "defaultEnabled": false
+}

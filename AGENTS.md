@@ -75,10 +75,11 @@ rule without a why gets worked around.
 
 ## Scope
 
-This project holds **the wiring between Claude Code and the workers it delegates to**: the
-`agy-run` and `glm-run` wrappers, the `agy` and `glm` skills, the GLM switcher, the permission
-entries that let them run
-unprompted, and this shared contract.
+This project holds **the wiring between Claude Code and the workers it delegates to**, packaged
+as the Claude Code plugin `workers`: the `agy-run` and `glm-run` wrappers, the `agy`, `glm`,
+`workers` and `check` skills, the two driver agents, the availability and account-error hooks,
+the GLM switcher, the permission entries that let the wrappers run unprompted, and this shared
+contract.
 
 We explicitly do **not** do: an Anthropic-API shim that puts `agy` underneath Claude Code as its
 model; `antigravity-claude-proxy` or any other tool that extracts OAuth tokens and calls Google's
@@ -103,15 +104,15 @@ slowly, and it is maintained forever.*
 
 | Purpose | Command |
 |---|---|
-| Smoke-test the link (the one agy call with `--dir` on this repo; `--mode plan` keeps agy out of accept-edits) | `python C:/Users/cupik/.claude/bin/agy-run.py --dir . --mode plan --prompt "reply with exactly: ok"` |
-| Smoke-test the GLM worker | `python C:/Users/cupik/.claude/bin/glm-run.py --no-tools --prompt "reply with exactly: ok"` |
+| Smoke-test both workers (one tiny call each through its wrapper, a few thousand tokens on each worker's own quota; prints `OK` / `ACCOUNT` / `DOWN`) | `python scripts/check.py` |
 | Available models | `agy models` |
 | Available agy agents | `agy agents` |
-| Wrapper reference | `python C:/Users/cupik/.claude/bin/agy-run.py --help` |
+| Wrapper reference | `python AGY/agy-run.py --help`, `python GLM/glm-run.py --help` |
 
 There is no build, no test suite, and no CI here — the deliverables are two Python wrappers
-(`AGY/agy-run.py`, `GLM/glm-run.py`), the GLM switcher (`GLM/switch-claude.ps1`), two skills, and
-the two JSON settings files they rely on. Verification is running the thing.
+(`AGY/agy-run.py`, `GLM/glm-run.py`), the GLM switcher (`GLM/switch-claude.ps1`), the plugin's
+skills, driver agents, hooks and scripts, and the two JSON settings files they rely on.
+Verification is running the thing.
 
 Prefer CLI tools already on this machine (`git`, `rg`, `python`) over adding anything. Note that
 `jq` and PowerShell 7 (`pwsh`) are **not** installed: parse JSON with `python`, and do not write
@@ -125,9 +126,15 @@ In this repo:
 
 - `AGENTS.md` — this contract, read by Claude Code (and so by the GLM worker); agy does not see it
 - `CLAUDE.md` — Claude Code harness behaviour only; imports this file on its first line
-- `.claude/routing.json` — which work goes to which model or worker; edit this, not any prose table
-- `.claude/skills/agy/` — the `agy` skill: how to delegate to the agy worker; source of the junction
-- `.claude/skills/glm/` — the `glm` skill: how to delegate to the GLM worker; source of the junction
+- `.claude-plugin/plugin.json` — the manifest of the Claude Code plugin `workers` (off by default)
+- `skills/` — the plugin's skills: `glm` and `agy` (how a driver delegates to each worker),
+  `workers` (how the lead uses the workers), `check` (`/workers:check`)
+- `agents/` — the driver subagents `glm-driver` and `agy-driver`, invoked as `workers:glm-driver`
+  and `workers:agy-driver`
+- `hooks/hooks.json` — SessionStart runs `scripts/check.py --session`; PostToolUse on Bash and
+  PowerShell runs `scripts/watch.py`
+- `scripts/` — `check.py` (availability check), `watch.py` (account-error notice after a wrapper
+  call), `errors.py` (the error recogniser both use)
 - `.claude/rules/` — path-scoped rules, loaded only when a matching file is opened
 - `docs/adr/` — architectural decisions; `ADR-INDEX.md` is the only maintained list of them
 - `docs/templates/` — task brief, ADR, memory entry
@@ -135,8 +142,9 @@ In this repo:
 - `GLM/` — `glm-run.py` (GLM worker) and `switch-claude.ps1` (switches Claude Code itself to Z.AI);
   see its README
 
-Wrapper and skill sources are versioned here; installed copies and the two settings files are
-not — say so in the summary when you change one.
+The whole plugin is versioned here and loaded in place through the junction
+`~/.claude/skills/workers`; there are no installed copies. The two settings files are not
+versioned here — say so in the summary when you change one.
 
 Legacy areas with constraints of their own are listed in `.claude/rules/known-problems.md`; it
 loads itself when you open a file under one of those paths.
@@ -172,7 +180,7 @@ loads itself when you open a file under one of those paths.
 - **Delegate sweeps and independent tracks; do single lookups yourself.** A repo-wide search, a
   per-module pass, or any question that needs many files read but only a conclusion returned goes
   to a subagent. One lookup, one file, one edit, and verification of your own work stay with you.
-  Which role or worker takes what: `.claude/routing.json`; the delegation triggers: the user-level
+  Which role or worker takes what: `skills/workers/SKILL.md`; the delegation triggers: the user-level
   `~/.claude/CLAUDE.md`, "Models and subagents".
   *Why: files read in this session stay in context and are paid for on every later turn; the same
   files read by a subagent are paid once and come back as a paragraph. The reverse is also true —
@@ -196,16 +204,15 @@ loads itself when you open a file under one of those paths.
 
 The lead session keeps the judgement — what to do, and whether the result is right — and its
 context is the one scarce resource: everything it reads is re-sent on every later turn. Executable
-work therefore runs in three tiers, and the full split with its parameters is in
-`.claude/routing.json`; read it before the first delegation of a session.
+work therefore runs in three tiers, and the full split is in `skills/workers/SKILL.md`; read it
+before the first delegation of a session.
 
-- **Lead** (the model is a per-project parameter in `routing.json`): design, plans, the brief for a driver,
-  final acceptance. Single lookups, single edits, and anything that needs this session's context
-  stay here.
+- **Lead**: design, plans, the brief for a driver, final acceptance. Single lookups, single
+  edits, and anything that needs this session's context stay here.
 - **Drivers** — subagents that own one delegated task end to end and return a report of a few
-  lines. `glm-driver` writes the worker brief, calls GLM, runs this repo's own smoke-test
+  lines. `workers:glm-driver` writes the worker brief, calls GLM, runs this repo's own smoke-test
   command itself (the `Commands` table above), re-briefs on failure up to three calls, commits
-  `wip(<scope>)` or reverts, and reports without the diff. `agy-driver` prepares a side
+  `wip(<scope>)` or reverts, and reports without the diff. `workers:agy-driver` prepares a side
   directory, calls agy at most twice — one retry after a fixable failure, reporting an account or
   eligibility error first either way — and returns the artifact's path.
 - **Workers** — separate processes, one self-contained job per call, never the model behind this
@@ -236,9 +243,8 @@ Four constraints hold whatever the brief says:
 lead re-pays them on every turn afterwards. A driver reads them once and hands back a short report.*
 
 The cost figures behind the GLM and agy choice — per-call token floors, the large-multifile-task
-measurements, agy's `--allow-shell` boundary — are in `.claude/skills/glm/SKILL.md` and
-`.claude/skills/agy/SKILL.md`; `.claude/routing.json` → `workers.*.cost_tokens` repeats them for
-orientation only.
+measurements, agy's `--allow-shell` boundary — are in `skills/glm/SKILL.md` and
+`skills/agy/SKILL.md`.
 
 ---
 
@@ -313,9 +319,9 @@ costs an incident.*
 1. Where the change can affect a wrapper, a skill, or a settings file: the matching smoke-test
    command returns a real answer and exit code 0. For documentation-only changes, say that no call
    was needed.
-2. Anything touched outside this repo (`~/.claude/bin/`, `~/.claude/settings.json`,
-   `~/.gemini/antigravity-cli/settings.json`) is named in the summary; `~/.claude/skills/agy` and
-   `~/.claude/skills/glm` are junctions into this repo, so their edits are ordinary repo changes.
+2. Anything touched outside this repo (`~/.claude/settings.json`,
+   `~/.gemini/antigravity-cli/settings.json`) is named in the summary; `~/.claude/skills/workers`
+   is a junction to this repo, so edits through it are ordinary repo changes.
 3. No `ANTHROPIC_BASE_URL` or `ANTHROPIC_AUTH_TOKEN` was set outside `glm-run.py`'s child
    environment (`GLM/switch-claude.ps1` is the one sanctioned exception — see ADR-001).
 4. Commit body states what, why, and how it was verified.

@@ -74,15 +74,20 @@ no longer mutually exclusive.
   plaintext into the `env` block of `~/.claude/settings.json`. That is accepted for the interactive
   switcher, which exists to run a whole session on GLM, and rejected for delegation, which keeps
   the key in the child environment only.
-- **Rollback cost:** small. Delete `GLM/glm-run.py`, the `glm` skill, the junction
-  `~/.claude/skills/glm`, and the `Bash(python C:/Users/cupik/.claude/bin/glm-run.py:*)` entry in
-  `~/.claude/settings.json`. Nothing else depends on it, and the switcher continues to work.
+- **Rollback cost:** small. Delete `GLM/glm-run.py`, the `glm` skill (`skills/glm/`), the
+  `glm-driver` agent, and the `permissions.allow` entries in `~/.claude/settings.json` naming
+  `python "C:/Users/cupik/.claude/skills/workers/GLM/glm-run.py"`. Nothing else depends on it,
+  and the switcher continues to work.
   *Amended 2026-09-15:* the entry was `Bash(python GLM/glm-run.py:*)` and the skill was
   project-scoped until that day; both went to an absolute path and a junction so the worker is
   reachable from every project. The decision above is unchanged by it.
   *Amended 2026-09-15 (2):* the repository moved to `Desktop/agent rules/glm-agy-cc-proxy`; the
-  wrapper is now installed as a copy at `~/.claude/bin/glm-run.py` and the permission entry names
+  wrapper was installed as a copy at `~/.claude/bin/glm-run.py` and the permission entry named
   that path. The decision is unchanged.
+  *Amended 2026-09-26:* the repository is the Claude Code plugin `workers`, loaded through the
+  junction `~/.claude/skills/workers`; the wrapper runs from the repo as
+  `python "${CLAUDE_PLUGIN_ROOT}/GLM/glm-run.py"` and the installed copy is gone. The decision is
+  unchanged.
 - **Follow-ups:** the auth-failure path — an absent, expired or revoked key, an exhausted quota, a
   Z.AI outage — has not been exercised; the wrapper's message for it is reasoned, not observed. It
   needs no second key to check: one call with a deliberately wrong token in a throwaway
@@ -91,13 +96,12 @@ no longer mutually exclusive.
   `CLAUDE_CODE_ENTRYPOINT` in the child environment (`GLM/README.md`, 401 section). An expired or
   revoked key and an exhausted quota remain unexercised.
 - **Measured 2026-09-15:** a large multi-file task was measured end to end — ~296 600 input-side
-  tokens, 263 s, 14 tests to 33 passing on the first attempt. Figures in `.claude/routing.json`
-  (`workers.glm`) and the `glm` skill.
+  tokens, 263 s, 14 tests to 33 passing on the first attempt. Figures in `skills/glm/SKILL.md`.
 
 ## Rules this creates for agents
 
-Reach GLM only through `glm-run.py` (installed copy `~/.claude/bin/glm-run.py`, source
-`GLM/glm-run.py`); never set `ANTHROPIC_BASE_URL` or `ANTHROPIC_AUTH_TOKEN`
+Reach GLM only through `glm-run.py` (`GLM/glm-run.py`, run from the `workers` plugin as
+`python "${CLAUDE_PLUGIN_ROOT}/GLM/glm-run.py"`); never set `ANTHROPIC_BASE_URL` or `ANTHROPIC_AUTH_TOKEN`
 for a session in order to run a delegated call — a global file read once at startup cannot express
 a per-call decision, and gets the desktop app's sessions as collateral.
 

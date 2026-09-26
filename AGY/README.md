@@ -1,10 +1,11 @@
 # AGY — the agy wrapper
 
-`AGY/agy-run.py` is the versioned source of the wrapper that delegates one self-contained task
-to the Antigravity CLI (`agy`) on the Google AI Pro quota. The call goes to the installed copy
-at `~/.claude/bin/agy-run.py` — the path the permission entry allow-lists — so after editing
-the source here, copy it over, the same contract as `GLM/glm-run.py`. How to delegate, what a
-call costs, and how to write the brief live in the `agy` skill (`.claude/skills/agy/`).
+`AGY/agy-run.py` is the wrapper that delegates one self-contained task to the Antigravity CLI
+(`agy`) on the Google AI Pro quota. It is part of the Claude Code plugin `workers` and runs from
+this repository, with no installed copy: the driver calls
+`python "${CLAUDE_PLUGIN_ROOT}/AGY/agy-run.py" ...`, the same contract as `GLM/glm-run.py`. How
+to delegate, what a call costs, and how to write the brief live in the `agy` skill
+(`skills/agy/`).
 
 ## Known limits of the guard
 
@@ -43,19 +44,24 @@ One more, in the same spirit: **"delegation goes through the skill" is conventio
 The permission entry approves the wrapper command whether or not the skill was
 loaded, and from any session — nothing technical enforces the skill-first order.
 
-## Installed copies and junctions
+## The plugin, its junction and permissions
 
 Outside this repo, and just as much part of the system:
 
-- `~/.claude/bin/agy-run.py` — the installed copy of `AGY/agy-run.py`; every call goes to it, so
-  after editing the source here, copy it over. `agy-run.cmd` is a shim for typing the command by
-  hand — not allow-listed in `~/.claude/settings.json`, so it always prompts.
-- `~/.claude/skills/agy` — a junction to `.claude/skills/agy/` here, not a file of its own. It is
-  what makes the `agy` skill load in every project; the content is versioned in this repo and
-  edited here, never through the junction path.
-- `~/.claude/settings.json` — the permission entry
-  `Bash(python C:/Users/cupik/.claude/bin/agy-run.py:*)` that lets the wrapper run without a
-  prompt. An entry is matched against the command text, so a call has to be spelled exactly that
-  way; it constrains no argument, which is why the wrapper checks `--dir` itself.
+- `~/.claude/skills/workers` — a junction to this repository, through which Claude Code loads it
+  in place as the plugin `workers@skills-dir`. The plugin is off by default and turned on per
+  project with `python tools/install.py workers <project> on` in `agent rules` (`off` turns it
+  off); the `workers:agy` skill and the `workers:agy-driver` agent exist only where it is on. The
+  content is edited here, never through the junction path; run `/reload-plugins` after an edit.
+- `~/.claude/settings.json` — `permissions.allow` entries naming
+  `python "C:/Users/cupik/.claude/skills/workers/AGY/agy-run.py"` (and the same for
+  `GLM/glm-run.py` and `scripts/check.py`), in both slash styles, so the wrapper runs without a
+  prompt. An entry is matched against the command text, so a call has to be spelled through that
+  path; `python AGY/agy-run.py` from the repo root prompts. It constrains no argument, which is
+  why the wrapper checks `--dir` itself.
 - `~/.gemini/antigravity-cli/settings.json` — agy's own model, permissions, workspace trust (see
   "Known limits of the guard" above).
+
+To check that agy (and GLM) answer right now: `/workers:check` in a session, or
+`python scripts/check.py` from the repo root — one tiny call each, one `OK` / `ACCOUNT` / `DOWN`
+line per worker. The wrapper can still be run directly for a manual test.

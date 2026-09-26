@@ -1,6 +1,6 @@
 ---
 name: agy
-description: How the agy-driver subagent delegates one artifact task to the Antigravity CLI (agy) on the Google AI Pro quota. Use when the agy-driver has been handed a task whose deliverable is a file or folder produced from scratch in a side directory - a research report with web search, a long standalone document, a generated module, or work matching one of agy's own skills - and the result comes back as a path. Not for in-session work, not for editing this project's working tree, and not for single lookups or single edits; ordinary execution that ends in a commit goes to the GLM worker instead.
+description: How the workers:agy-driver subagent delegates one artifact task to the Antigravity CLI (agy) on the Google AI Pro quota. Use when the agy-driver has been handed a task whose deliverable is a file or folder produced from scratch in a side directory - a research report with web search, a long standalone document, a generated module, or work matching one of agy's own skills - and the result comes back as a path. Not for in-session work, not for editing this project's working tree, and not for single lookups or single edits; ordinary execution that ends in a commit goes to the GLM worker instead.
 ---
 
 # Delegating to agy
@@ -13,14 +13,16 @@ Code - it is a worker called for one job at a time.
 **agy produces artifacts; it never edits a project's working tree.** Its `--dir` is a side
 directory prepared for the call - a fresh git repository in the session scratchpad with the inputs
 copied in and committed - and what comes back is a path. Bringing the artifact into the project is
-the lead's decision, made as an ordinary edit. Where a project carries `.claude/routing.json`,
-the call is made by the `agy-driver` subagent, not by the lead session.
+the lead's decision, made as an ordinary edit. The call is made by the `workers:agy-driver`
+subagent, not by the lead session.
 
 ## The call
 
 ```bash
-python C:/Users/cupik/.claude/bin/agy-run.py --dir <workdir> --prompt "<brief>"
+python "${CLAUDE_PLUGIN_ROOT}/AGY/agy-run.py" --dir <workdir> --prompt "<brief>"
 ```
+
+Spell the command exactly like that; the path is filled in when this skill loads.
 
 Long brief: write it to a file first, then `--prompt-file <path>`. What the wrapper measures is the
 **quoted command line** (`subprocess.list2cmdline`) against 32 767 - 512 chars, not the brief's raw
