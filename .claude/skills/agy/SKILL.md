@@ -205,6 +205,10 @@ lead. Each step is here because skipping it has a known failure:
 Raise `--timeout-min` above the default 5 for multi-file work: the measured task took 139 s, and
 that was a small project.
 
+Run the wrapper with the Bash tool's `run_in_background` for anything that may exceed two minutes:
+the Bash tool's own timeout (120 s default, 600 s max) kills the wrapper before the wrapper's own
+limit (`--timeout-min` × 60 + 30 s) is reached, and the wrapper now takes agy down with it.
+
 ## Handling the result
 
 - Put the usage line in your report to the lead when a call is expensive or when two run in a

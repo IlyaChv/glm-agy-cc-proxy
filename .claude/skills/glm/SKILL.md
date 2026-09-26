@@ -184,6 +184,10 @@ answer as the first line, do what does not depend on it, and stop - do not subst
 
 Raise `--timeout-min` above the default 10 for multi-file work.
 
+Run the wrapper with the Bash tool's `run_in_background` for anything that may exceed two minutes:
+the Bash tool's own timeout (120 s default, 600 s max) kills the wrapper before the wrapper's own
+limit (`--timeout-min` × 60 + 30 s) is reached, and the wrapper now takes its worker down with it.
+
 ## Handling the result
 
 - **Do not retype a long answer into your reply.** What the worker returned is already in your

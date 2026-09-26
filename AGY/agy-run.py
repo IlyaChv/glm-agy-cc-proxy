@@ -172,8 +172,8 @@ def git(args, cwd):
 
 
 def forbidden_subpath(real):
-    """The FORBIDDEN_SUBPATHS entry `real` sits inside (or equals), or None."""
-    home = os.path.abspath(os.path.expanduser("~"))
+    """The FORBIDDEN_SUBPATHS entry `real` (normcased) sits inside (or equals), or None."""
+    home = os.path.normcase(os.path.realpath(os.path.expanduser("~")))
     # realpath maps neither a UNC administrative share (\\localhost\C$\...)
     # nor a subst-mapped drive onto the drive-letter form, so a forbidden
     # directory spelled that way walks past the comparison below. Refuse any
@@ -184,7 +184,7 @@ def forbidden_subpath(real):
         )
     home_drive = os.path.splitdrive(home)[0]
     for rel in FORBIDDEN_SUBPATHS:
-        forbidden = os.path.realpath(os.path.join(home, *rel.split("/")))
+        forbidden = os.path.normcase(os.path.realpath(os.path.join(home, *rel.split("/"))))
         inside = real == forbidden or real.startswith(forbidden + os.sep)
         if not inside and os.path.splitdrive(real)[0] != home_drive:
             # A subst drive gives the same directory a different drive
@@ -208,7 +208,7 @@ def check_prompt_file_allowed(path):
     pointing this at a credential store reads it into the transcript. Same
     floor as --dir, and also not skippable with --force.
     """
-    rel = forbidden_subpath(os.path.realpath(os.path.abspath(path)))
+    rel = forbidden_subpath(os.path.normcase(os.path.realpath(os.path.abspath(path))))
     if rel:
         sys.exit(
             "agy-run: refused, --prompt-file is inside {}, which holds credentials "
@@ -227,8 +227,8 @@ def check_dir_allowed(work_dir):
     Not skippable with --force: --force exists to get past a dirty tree, which
     is a judgement call, whereas pointing agy at a credential store is not.
     """
-    home = os.path.abspath(os.path.expanduser("~"))
-    real = os.path.realpath(work_dir)
+    home = os.path.normcase(os.path.realpath(os.path.expanduser("~")))
+    real = os.path.normcase(os.path.realpath(work_dir))
 
     if real == home:
         sys.exit(
@@ -260,11 +260,23 @@ def check_dir_allowed(work_dir):
             "there. Point --dir at a project directory instead.".format(rel)
         )
 
+    # A directory that contains a forbidden one (~/AppData holds AppData/Roaming) hands it over too.
+    for rel in FORBIDDEN_SUBPATHS:
+        forbidden = os.path.normcase(os.path.realpath(os.path.join(home, *rel.split("/"))))
+        if forbidden.startswith(real + os.sep):
+            sys.exit(
+                "agy-run: refused, --dir contains {}, which holds credentials or "
+                "agent configuration.\n         Point --dir at a project directory "
+                "instead.".format(rel)
+            )
+
     # Optional per-machine narrowing, off unless the caller sets it. Semicolon
     # separated, since Windows paths contain colons.
     roots = os.environ.get("AGY_ALLOWED_ROOTS", "").strip()
     if roots:
-        allowed = [os.path.realpath(r.strip()) for r in roots.split(";") if r.strip()]
+        allowed = [
+            os.path.normcase(os.path.realpath(r.strip())) for r in roots.split(";") if r.strip()
+        ]
         if not any(real == a or real.startswith(a + os.sep) for a in allowed):
             sys.exit(
                 "agy-run: refused, --dir is outside AGY_ALLOWED_ROOTS.\n"
@@ -354,7 +366,7 @@ def report_changes(dirs):
         )
 
 
-def build_cmd(exe, prompt, args, mode, sandbox, blanket):
+def build_cmd(exe, prompt, args, mode, sandbox, blanket, extra_dirs):
     cmd = [
         exe,
         "-p=" + prompt,
@@ -370,9 +382,8 @@ def build_cmd(exe, prompt, args, mode, sandbox, blanket):
         cmd.append("--sandbox")
     if mode:
         cmd += ["--mode", mode]
-    if args.add_dir:
-        for d in args.add_dir:
-            cmd += ["--add-dir", d]
+    for d in extra_dirs:
+        cmd += ["--add-dir", d]
     if blanket:
         cmd.append("--dangerously-skip-permissions")
     return cmd
@@ -396,6 +407,70 @@ def kill_tree(proc):
         proc.wait(timeout=5)
     except Exception:
         pass
+
+
+def kill_on_close_job(proc):
+    """Put proc in a Job Object the OS kills when this wrapper exits; the handle, or None."""
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        class BasicLimit(ctypes.Structure):
+            _fields_ = [
+                ("PerProcessUserTimeLimit", ctypes.c_int64),
+                ("PerJobUserTimeLimit", ctypes.c_int64),
+                ("LimitFlags", wintypes.DWORD),
+                ("MinimumWorkingSetSize", ctypes.c_size_t),
+                ("MaximumWorkingSetSize", ctypes.c_size_t),
+                ("ActiveProcessLimit", wintypes.DWORD),
+                ("Affinity", ctypes.c_size_t),
+                ("PriorityClass", wintypes.DWORD),
+                ("SchedulingClass", wintypes.DWORD),
+            ]
+
+        class IoCounters(ctypes.Structure):
+            _fields_ = [(name, ctypes.c_uint64) for name in (
+                "ReadOperationCount", "WriteOperationCount", "OtherOperationCount",
+                "ReadTransferCount", "WriteTransferCount", "OtherTransferCount",
+            )]
+
+        class ExtendedLimit(ctypes.Structure):
+            _fields_ = [
+                ("BasicLimitInformation", BasicLimit),
+                ("IoInfo", IoCounters),
+                ("ProcessMemoryLimit", ctypes.c_size_t),
+                ("JobMemoryLimit", ctypes.c_size_t),
+                ("PeakProcessMemoryUsed", ctypes.c_size_t),
+                ("PeakJobMemoryUsed", ctypes.c_size_t),
+            ]
+
+        k32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        k32.CreateJobObjectW.restype = wintypes.HANDLE
+        k32.CreateJobObjectW.argtypes = [wintypes.LPVOID, wintypes.LPCWSTR]
+        k32.SetInformationJobObject.restype = wintypes.BOOL
+        k32.SetInformationJobObject.argtypes = [
+            wintypes.HANDLE, ctypes.c_int, wintypes.LPVOID, wintypes.DWORD,
+        ]
+        k32.AssignProcessToJobObject.restype = wintypes.BOOL
+        k32.AssignProcessToJobObject.argtypes = [wintypes.HANDLE, wintypes.HANDLE]
+
+        job = k32.CreateJobObjectW(None, None)
+        if not job:
+            raise ctypes.WinError(ctypes.get_last_error())
+        info = ExtendedLimit()
+        info.BasicLimitInformation.LimitFlags = 0x2000  # JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
+        # 9 = JobObjectExtendedLimitInformation.
+        if not k32.SetInformationJobObject(job, 9, ctypes.byref(info), ctypes.sizeof(info)):
+            raise ctypes.WinError(ctypes.get_last_error())
+        if not k32.AssignProcessToJobObject(job, int(proc._handle)):
+            raise ctypes.WinError(ctypes.get_last_error())
+        return job
+    except Exception as exc:
+        sys.stderr.write(
+            "agy-run: warning: could not tie agy to this process ({}); if this "
+            "wrapper is killed, agy keeps running\n".format(exc)
+        )
+        return None
 
 
 def echo_stderr(err):
@@ -547,7 +622,8 @@ def main():
 
     # Unconditional, and before anything else: --force is about a dirty tree,
     # not about where agy is allowed to work.
-    extra_dirs = [os.path.abspath(e) for e in args.add_dir or []]
+    # agy runs with cwd=work_dir, so a relative --add-dir means work_dir/<it>; resolve once.
+    extra_dirs = [os.path.realpath(os.path.join(work_dir, e)) for e in args.add_dir or []]
     for d in [work_dir] + extra_dirs:
         check_dir_allowed(d)
 
@@ -563,7 +639,13 @@ def main():
             warn_about_ignored(d)
 
     exe = find_agy()
-    cmd = build_cmd(exe, prompt, args, mode, sandbox, blanket)
+    # A .cmd/.bat shim runs through cmd.exe, which re-parses the brief in argv as shell syntax.
+    if not exe.lower().endswith(".exe"):
+        sys.exit(
+            "agy-run: refused, {} is not an .exe. A .cmd or .bat shim would pass the "
+            "brief through cmd.exe; set AGY_BIN to the full path of agy.exe.".format(exe)
+        )
+    cmd = build_cmd(exe, prompt, args, mode, sandbox, blanket, extra_dirs)
     quoted = len(subprocess.list2cmdline(cmd))
     # Set when the brief is handed over by path instead of inline; the
     # CANNOT READ BRIEF check below needs the path it pointed at.
@@ -607,7 +689,7 @@ def main():
             "Then follow the instructions in it. "
             "If you cannot read it, reply with exactly: CANNOT READ BRIEF and nothing else."
         ).format(ref)
-        cmd = build_cmd(exe, prompt, args, mode, sandbox, blanket)
+        cmd = build_cmd(exe, prompt, args, mode, sandbox, blanket, extra_dirs)
         sys.stderr.write(
             "agy-run: brief would overflow the {}-char Windows command line, "
             "passing it by path instead of inline\n".format(MAX_CMDLINE)
@@ -619,12 +701,21 @@ def main():
     proc = subprocess.Popen(
         cmd,
         cwd=work_dir,
+        # agy takes the brief from -p=, never from stdin.
+        stdin=subprocess.DEVNULL,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
         encoding="utf-8",
         errors="replace",
+        # Anthropic and Claude Code tokens of the calling session are none of agy's business.
+        env={
+            k: v for k, v in os.environ.items()
+            if not k.upper().startswith(("ANTHROPIC_", "CLAUDE_CODE_"))
+        },
     )
+    # Never closed here: the OS closes it when this process dies, which kills agy.
+    job = kill_on_close_job(proc)
     try:
         out, err = proc.communicate(timeout=hard_limit)
     except subprocess.TimeoutExpired:
@@ -637,6 +728,9 @@ def main():
             "call unchanged: if the task is large, raise --timeout-min deliberately; "
             "otherwise narrow the brief or report the hang.".format(hard_limit)
         )
+    finally:
+        if proc.poll() is None:
+            kill_tree(proc)
 
     echo_stderr(err)
 

@@ -203,14 +203,60 @@ def git(args, cwd):
     )
 
 
+def forbidden_subpath(real):
+    """The FORBIDDEN_SUBPATHS entry `real` (normcased) sits inside (or equals), or None."""
+    home = os.path.normcase(os.path.realpath(os.path.expanduser("~")))
+    # realpath maps neither a UNC administrative share (\\localhost\C$\...)
+    # nor a subst-mapped drive onto the drive-letter form, so a forbidden
+    # directory spelled that way walks past the comparison below. Refuse any
+    # UNC path outright rather than try to canonicalise it.
+    if real.startswith("\\\\"):
+        sys.exit(
+            "glm-run: refused, {} is a UNC path; use the drive-letter form.".format(real)
+        )
+    home_drive = os.path.splitdrive(home)[0]
+    for rel in FORBIDDEN_SUBPATHS:
+        forbidden = os.path.normcase(os.path.realpath(os.path.join(home, *rel.split("/"))))
+        inside = real == forbidden or real.startswith(forbidden + os.sep)
+        if not inside and os.path.splitdrive(real)[0] != home_drive:
+            # A subst drive gives the same directory a different drive
+            # letter, which the string comparison misses. samefile sees
+            # through it; it raises when either path does not exist - a
+            # refused directory can be gone - so swallow that and keep
+            # looking.
+            try:
+                inside = os.path.samefile(real, forbidden)
+            except OSError:
+                pass
+        if inside:
+            return rel
+    return None
+
+
+def check_prompt_file_allowed(path):
+    """Refuse a --prompt-file that sits under the forbidden directories.
+
+    The file's contents become the brief and are sent to Z.AI, so pointing this
+    at a credential store (the Z.AI key file included) ships it to a third party.
+    Same floor as --dir, and also not skippable with --force.
+    """
+    rel = forbidden_subpath(os.path.normcase(os.path.realpath(os.path.abspath(path))))
+    if rel:
+        sys.exit(
+            "glm-run: refused, --prompt-file is inside {}, which holds credentials "
+            "or agent configuration.\n         If you truly meant it, move the file "
+            "out first.".format(rel)
+        )
+
+
 def check_dir_allowed(work_dir):
     """Refuse a working directory that no delegated task should ever have.
 
     Not skippable with --force: --force exists to get past a dirty tree, which is
     a judgement call, whereas pointing a worker at a credential store is not.
     """
-    home = os.path.abspath(os.path.expanduser("~"))
-    real = os.path.realpath(work_dir)
+    home = os.path.normcase(os.path.realpath(os.path.expanduser("~")))
+    real = os.path.normcase(os.path.realpath(work_dir))
 
     if real == home:
         sys.exit(
@@ -234,39 +280,31 @@ def check_dir_allowed(work_dir):
             "directory. Point it at a project, not at everything on the machine."
         )
 
-    # realpath maps neither a UNC administrative share (\\localhost\C$\...)
-    # nor a subst-mapped drive onto the drive-letter form, so a forbidden
-    # directory spelled that way walks past the comparison below. Refuse any
-    # UNC path outright rather than try to canonicalise it.
-    if os.path.normcase(real).startswith("\\\\"):
-        sys.exit("glm-run: refused, --dir is a UNC path; use the drive-letter form.")
+    rel = forbidden_subpath(real)
+    if rel:
+        sys.exit(
+            "glm-run: refused, --dir is inside {}, which holds credentials or "
+            "agent configuration.\n         No delegated task needs to work "
+            "there. Point --dir at a project directory instead.".format(rel)
+        )
 
-    home_drive = os.path.splitdrive(home)[0]
+    # A directory that contains a forbidden one (~/AppData holds AppData/Roaming) hands it over too.
     for rel in FORBIDDEN_SUBPATHS:
-        forbidden = os.path.realpath(os.path.join(home, *rel.split("/")))
-        inside = real == forbidden or real.startswith(forbidden + os.sep)
-        if not inside and os.path.splitdrive(real)[0] != home_drive:
-            # A subst drive gives the same directory a different drive
-            # letter, which the string comparison misses. samefile sees
-            # through it; it raises when either path does not exist - a
-            # refused directory can be gone - so swallow that and keep
-            # looking.
-            try:
-                inside = os.path.samefile(real, forbidden)
-            except OSError:
-                pass
-        if inside:
+        forbidden = os.path.normcase(os.path.realpath(os.path.join(home, *rel.split("/"))))
+        if forbidden.startswith(real + os.sep):
             sys.exit(
-                "glm-run: refused, --dir is inside {}, which holds credentials or "
-                "agent configuration.\n         No delegated task needs to work "
-                "there. Point --dir at a project directory instead.".format(rel)
+                "glm-run: refused, --dir contains {}, which holds credentials or "
+                "agent configuration.\n         Point --dir at a project directory "
+                "instead.".format(rel)
             )
 
     # Optional per-machine narrowing, off unless the caller sets it. Semicolon
     # separated, since Windows paths contain colons.
     roots = os.environ.get("GLM_ALLOWED_ROOTS", "").strip()
     if roots:
-        allowed = [os.path.realpath(r.strip()) for r in roots.split(";") if r.strip()]
+        allowed = [
+            os.path.normcase(os.path.realpath(r.strip())) for r in roots.split(";") if r.strip()
+        ]
         if not any(real == a or real.startswith(a + os.sep) for a in allowed):
             sys.exit(
                 "glm-run: refused, --dir is outside GLM_ALLOWED_ROOTS.\n"
@@ -357,7 +395,13 @@ def child_env(key):
     changes the endpoint for every future session including the desktop app's,
     and a per-process environment cannot do that.
     """
-    env = os.environ.copy()
+    # Drop every inherited Anthropic and Claude Code variable (keys, host-session auth such as
+    # CLAUDE_CODE_ENTRYPOINT, which makes Z.AI answer 401) before setting the Z.AI ones.
+    env = {
+        k: v for k, v in os.environ.items()
+        if not k.upper().startswith(("ANTHROPIC_", "CLAUDE_CODE_"))
+    }
+    env.pop("CLAUDECODE", None)
     env["ANTHROPIC_BASE_URL"] = BASE_URL
     env["ANTHROPIC_AUTH_TOKEN"] = key
     env["ANTHROPIC_DEFAULT_SONNET_MODEL"] = GLM_SONNET
@@ -369,30 +413,10 @@ def child_env(key):
     # tool is also denied by name on the command line; this is the second lock.
     env["CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH"] = "0"
     env["CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC"] = "1"
-    # An ANTHROPIC_API_KEY inherited from the parent would be sent to Z.AI, which
-    # is both useless and a credential leak to a third party. Drop every
-    # Anthropic auth variable we are not setting ourselves.
-    for stale in ("ANTHROPIC_API_KEY", "ANTHROPIC_CUSTOM_HEADERS", "ANTHROPIC_MODEL",
-                  "ANTHROPIC_SMALL_FAST_MODEL", "CLAUDE_CODE_USE_BEDROCK",
-                  "CLAUDE_CODE_USE_VERTEX", "CLAUDE_CODE_OAUTH_TOKEN"):
-        env.pop(stale, None)
-    # A caller started by the desktop app passes on its host-session variables.
-    # With CLAUDE_CODE_ENTRYPOINT=claude-desktop the child takes the host's
-    # auth instead of ANTHROPIC_AUTH_TOKEN and Z.AI answers 401 "token expired or
-    # incorrect" on every one of 11 retries, ~5 minutes (measured 2026-09-26;
-    # dropping that one variable alone fixes it). The rest tie the child to the
-    # host session - its auth refresh and its message socket - which a worker
-    # must not reach.
-    for host in ("CLAUDE_CODE_ENTRYPOINT", "CLAUDE_CODE_SDK_HAS_HOST_AUTH_REFRESH",
-                 "CLAUDE_CODE_OAUTH_SCOPES", "CLAUDE_CODE_MESSAGING_SOCKET",
-                 "CLAUDE_CODE_MESSAGING_TOKEN", "CLAUDE_CODE_HOST_SESSION_ID",
-                 "CLAUDE_CODE_SESSION_ID", "CLAUDE_CODE_CHILD_SESSION",
-                 "CLAUDE_CODE_DESKTOP_APP_VERSION", "CLAUDECODE"):
-        env.pop(host, None)
     return env
 
 
-def build_cmd(exe, args, mode, blanket, no_tools):
+def build_cmd(exe, args, mode, blanket, no_tools, extra_dirs):
     cmd = [
         exe,
         "--print",
@@ -412,8 +436,8 @@ def build_cmd(exe, args, mode, blanket, no_tools):
         cmd += ["--effort", args.effort]
     if args.agent:
         cmd += ["--agent", args.agent]
-    if args.add_dir:
-        cmd += ["--add-dir"] + list(args.add_dir)
+    if extra_dirs:
+        cmd += ["--add-dir"] + list(extra_dirs)
 
     if no_tools:
         # Empty string means "no tools at all" - a pure-reasoning call.
@@ -499,6 +523,7 @@ def main():
     if args.prompt_file:
         if not os.path.isfile(args.prompt_file):
             sys.exit("glm-run: no such prompt file: " + args.prompt_file)
+        check_prompt_file_allowed(args.prompt_file)
         with open(args.prompt_file, encoding="utf-8") as fh:
             prompt = fh.read()
     else:
@@ -519,7 +544,8 @@ def main():
 
     # Unconditional, and before anything else: --force is about a dirty tree, not
     # about where the worker is allowed to work.
-    extra_dirs = [os.path.abspath(e) for e in args.add_dir or []]
+    # The child runs with cwd=work_dir, so a relative --add-dir means work_dir/<it>; resolve once.
+    extra_dirs = [os.path.realpath(os.path.join(work_dir, e)) for e in args.add_dir or []]
     for d in [work_dir] + extra_dirs:
         check_dir_allowed(d)
 
@@ -532,7 +558,7 @@ def main():
             warn_about_ignored(d)
 
     key = read_key()
-    cmd = build_cmd(find_claude(), args, mode, blanket, args.no_tools)
+    cmd = build_cmd(find_claude(), args, mode, blanket, args.no_tools, extra_dirs)
     return run(cmd, work_dir, prompt, key, args, extra_dirs, guarded)
 
 
@@ -554,6 +580,70 @@ def kill_tree(proc):
         proc.wait(timeout=5)
     except Exception:
         pass
+
+
+def kill_on_close_job(proc):
+    """Put proc in a Job Object the OS kills when this wrapper exits; the handle, or None."""
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        class BasicLimit(ctypes.Structure):
+            _fields_ = [
+                ("PerProcessUserTimeLimit", ctypes.c_int64),
+                ("PerJobUserTimeLimit", ctypes.c_int64),
+                ("LimitFlags", wintypes.DWORD),
+                ("MinimumWorkingSetSize", ctypes.c_size_t),
+                ("MaximumWorkingSetSize", ctypes.c_size_t),
+                ("ActiveProcessLimit", wintypes.DWORD),
+                ("Affinity", ctypes.c_size_t),
+                ("PriorityClass", wintypes.DWORD),
+                ("SchedulingClass", wintypes.DWORD),
+            ]
+
+        class IoCounters(ctypes.Structure):
+            _fields_ = [(name, ctypes.c_uint64) for name in (
+                "ReadOperationCount", "WriteOperationCount", "OtherOperationCount",
+                "ReadTransferCount", "WriteTransferCount", "OtherTransferCount",
+            )]
+
+        class ExtendedLimit(ctypes.Structure):
+            _fields_ = [
+                ("BasicLimitInformation", BasicLimit),
+                ("IoInfo", IoCounters),
+                ("ProcessMemoryLimit", ctypes.c_size_t),
+                ("JobMemoryLimit", ctypes.c_size_t),
+                ("PeakProcessMemoryUsed", ctypes.c_size_t),
+                ("PeakJobMemoryUsed", ctypes.c_size_t),
+            ]
+
+        k32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        k32.CreateJobObjectW.restype = wintypes.HANDLE
+        k32.CreateJobObjectW.argtypes = [wintypes.LPVOID, wintypes.LPCWSTR]
+        k32.SetInformationJobObject.restype = wintypes.BOOL
+        k32.SetInformationJobObject.argtypes = [
+            wintypes.HANDLE, ctypes.c_int, wintypes.LPVOID, wintypes.DWORD,
+        ]
+        k32.AssignProcessToJobObject.restype = wintypes.BOOL
+        k32.AssignProcessToJobObject.argtypes = [wintypes.HANDLE, wintypes.HANDLE]
+
+        job = k32.CreateJobObjectW(None, None)
+        if not job:
+            raise ctypes.WinError(ctypes.get_last_error())
+        info = ExtendedLimit()
+        info.BasicLimitInformation.LimitFlags = 0x2000  # JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
+        # 9 = JobObjectExtendedLimitInformation.
+        if not k32.SetInformationJobObject(job, 9, ctypes.byref(info), ctypes.sizeof(info)):
+            raise ctypes.WinError(ctypes.get_last_error())
+        if not k32.AssignProcessToJobObject(job, int(proc._handle)):
+            raise ctypes.WinError(ctypes.get_last_error())
+        return job
+    except Exception as exc:
+        sys.stderr.write(
+            "glm-run: warning: could not tie the worker to this process ({}); if this "
+            "wrapper is killed, the worker keeps running\n".format(exc)
+        )
+        return None
 
 
 def echo_stderr(err):
@@ -630,6 +720,8 @@ def run(cmd, work_dir, prompt, key, args, extra_dirs, guarded):
         errors="replace",
         env=child_env(key),
     )
+    # Never closed here: the OS closes it when this process dies, which kills the worker.
+    job = kill_on_close_job(proc)
 
     hard_limit = args.timeout_min * 60 + 30
     try:
@@ -644,6 +736,9 @@ def run(cmd, work_dir, prompt, key, args, extra_dirs, guarded):
             "rather than a slow model. Do not retry the same call unchanged; narrow "
             "it, or raise --timeout-min deliberately.".format(hard_limit, API_TIMEOUT_MS)
         )
+    finally:
+        if proc.poll() is None:
+            kill_tree(proc)
 
     echo_stderr(err)
 
