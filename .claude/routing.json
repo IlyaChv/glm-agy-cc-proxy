@@ -1,7 +1,7 @@
 {
-  "_README": "Routing for this project: which kind of work goes to which model or worker. CLAUDE.md points here instead of carrying a table, so this is the one place to change the split. Copy it to .claude/routing.json in every project; edit values per project, keep the shape. Nothing parses it - the agent reads it before the first delegation of a session - so every string is written for a reader. Model and effort of a subagent role are authoritative in the role's agents/<name>.md frontmatter; this file names the role and repeats the pairing for orientation only.",
+  "_README": "Routing for this project: which kind of work goes to which model or worker. CLAUDE.md points here instead of carrying a table, so this is the one place to change the split. Copy it to .claude/routing.json in every project; edit values per project, keep the shape. Nothing parses it - the agent reads it before the first delegation of a session - so every string is written for a reader. The model of a subagent role is authoritative in the role's agents/<name>.md frontmatter; no role pins effort - every subagent runs at the harness default for its model. This file names the role and repeats the model for orientation only.",
   "version": 2,
-  "updated": "2026-09-15",
+  "updated": "2026-09-26",
 
   "conserve": {
     "scarce": "the lead's context",
@@ -11,9 +11,16 @@
   },
 
   "axes": {
-    "_note": "Two mechanisms that look alike and are not interchangeable. A subagent is started with the Agent tool and picks a model from the harness enum; it can receive the lead's context in its prompt and runs in parallel with others. A worker is a separate process reached through a wrapper in Bash; it starts blank on every call, cannot be talked to, and returns one answer. GLM has no subagent form - model: 'glm' matches nothing. agy has no subagent form either. Haiku is not a pickable subagent model - it is the harness's reserved slot, see 'reserved'.",
-    "subagent_models": ["fable", "opus", "sonnet"],
+    "_note": "Two mechanisms that look alike and are not interchangeable. A subagent is started with the Agent tool and picks a model from the harness enum; it can receive the lead's context in its prompt and runs in parallel with others. A worker is a separate process reached through a wrapper in Bash; it starts blank on every call, cannot be talked to, and returns one answer. GLM has no subagent form - model: 'glm' matches nothing. agy has no subagent form either. Haiku 4.5 is below the model floor and its alias is the harness's reserved slot, see 'reserved'; Haiku 5.5 becomes pickable when it ships.",
+    "subagent_models": ["fable", "claude-opus-5-5"],
     "workers": ["glm", "agy"]
+  },
+
+  "model_policy": {
+    "floor": "Anthropic models of generation 5.1 and later only: Fable 5.1 (alias fable, claude-fable-5-1) and Opus 5.5 (claude-opus-5-5). Opus 5, Sonnet 5 and Haiku 4.5 are not used.",
+    "on_release": "Sonnet 5.5: agy-driver, implementer, sweeper and drafter move to it. Haiku 5.5: assignable for the cheapest mechanical work (sweeper, drafter). Update the role frontmatter, this file and the three model-table-rev copies together.",
+    "effort": "no role pins effort; every subagent runs at the harness default for its model (Fable 5.1 high, Opus 5.5 medium). Workflow agent() calls leave effort unset too.",
+    "ids": "full ids in frontmatter where an alias could resolve below the floor - the opus alias may still mean Opus 5."
   },
 
   "tiers": {
@@ -28,8 +35,7 @@
       "covers": "design, plans, briefs for drivers and subagents, consolidation, final acceptance",
       "kind": "model",
       "model": "fable",
-      "model_is_parameter": "set per project; opus where Fable is unavailable or the project runs in fast mode. Drivers stay separate subagents whichever model leads - the point of the tier is context isolation, not a different head.",
-      "effort": "high",
+      "model_is_parameter": "set per project; claude-opus-5-5 where Fable is unavailable or the project runs in fast mode. Drivers stay separate subagents whichever model leads - the point of the tier is context isolation, not a different head.",
       "invoke": "this session"
     },
 
@@ -37,8 +43,7 @@
       "covers": "every self-contained execution task that goes to GLM: implementing an approved plan, a sweep or audit of a module, a long draft, a mechanical multi-file pass",
       "kind": "subagent",
       "agent_type": "glm-driver",
-      "model": "opus",
-      "effort": "high",
+      "model": "claude-opus-5-5",
       "why_opus": "the driver decides whether a result is acceptable or needs a re-brief; that is judgement, not mechanics, and it is the last check before the lead sees anything",
       "loop": {
         "max_worker_calls": 3,
@@ -68,8 +73,8 @@
       "covers": "a step inside the lead's current work: a one- or two-file edit, a check that needs the context the lead is holding, work on a dirty tree that is inconvenient to commit mid-way, work outside a git repository, small parallel probes",
       "kind": "subagent",
       "agent_types": ["implementer", "sweeper", "drafter"],
-      "model": "sonnet",
-      "effort": "implementer high, sweeper medium, drafter low (authoritative value in each role's frontmatter); low only for the mechanical render the drafter does - anywhere judgement is needed, a scoped-down result at low effort looks complete",
+      "model": "claude-opus-5-5",
+      "model_note": "Sonnet 5 is below the floor; these roles move to Sonnet 5.5 when it ships, and sweeper and drafter are candidates for Haiku 5.5",
       "why_not_glm": "GLM starts blank and needs a clean tree; these tasks need neither the ceremony nor the isolation",
       "invoke": "Agent(subagent_type: <role>)"
     },
@@ -78,12 +83,12 @@
       "covers": "work whose deliverable is a file or folder produced from scratch: a research report with web search, a long standalone document, a generated module, anything matching one of agy's own skills",
       "kind": "subagent",
       "agent_type": "agy-driver",
-      "model": "sonnet",
-      "effort": "medium",
+      "model": "claude-opus-5-5",
+      "model_note": "Sonnet 5.5 when it ships",
       "worker": "agy",
       "boundary": "agy never edits the project's working tree. Its --dir is a side directory the driver prepares (a fresh git repository with the inputs copied in and committed, since the wrapper requires a clean git checkout). The driver checks that the artifact exists on disk and returns its path with a four-line report; bringing it into the project is the lead's decision, made as an ordinary edit.",
       "acceptance": "the lead spot-checks three cited claims against their sources before bringing a research artifact in",
-      "why_sonnet": "the driver has nothing to judge here - it prepares the side directory, calls once, and relays a path",
+      "why_cheapest_model": "the driver has nothing to judge here - it prepares the side directory, calls at most twice (one retry after a fixable failure), and relays a path",
       "invoke": "Agent(subagent_type: \"agy-driver\") -> python C:/Users/cupik/.claude/bin/agy-run.py"
     },
 
@@ -92,9 +97,8 @@
       "kind": "subagent",
       "agent_type": "verifier",
       "model": "fable",
-      "also_allowed": ["opus"],
-      "constraint": "never the model that produced the thing being checked; for a finding written by fable, call with model: opus",
-      "effort": "medium",
+      "also_allowed": ["claude-opus-5-5"],
+      "constraint": "never the model that produced the thing being checked; for a finding written by fable, call with model: claude-opus-5-5",
       "note": "not run on every delegation. A glm-driver's check is verification enough for routine execution; the lead reads the diff when it decides to."
     },
 
@@ -102,8 +106,7 @@
       "covers": "code review, line-level finding shards",
       "kind": "subagent",
       "agent_type": "reviewer",
-      "model": "opus",
-      "effort": "medium fast pass, high thorough",
+      "model": "claude-opus-5-5",
       "finding_stage": "the reviewer reports every issue including uncertain and low-severity ones, with confidence and severity per finding; filtering happens in the verify stage, never in the finding stage"
     },
 
@@ -112,7 +115,6 @@
       "kind": "subagent",
       "agent_type": "researcher",
       "model": "fable",
-      "effort": "medium or high, not low",
       "why_not_agy": "agy is for a research deliverable (a report to keep); a researcher answers a question the lead needs now"
     }
   },
@@ -166,7 +168,7 @@
       "source": "glm-agy-cc-proxy/AGY/agy-run.py, the versioned original; after editing it, copy it over the installed copy",
       "permission_entry": "Bash(python C:/Users/cupik/.claude/bin/agy-run.py:*) in ~/.claude/settings.json",
       "quota": "personal Google AI Pro, refills every five hours",
-      "availability_note": "2026-09-15: one call failed with 'account is not eligible for Antigravity ... not available in your location' before spending quota; a re-check an hour later passed (status=SUCCESS, 17 400 input tokens). Treat that error as transient: retry once, and only if it repeats route the artifact work to a researcher or drafter subagent.",
+      "availability_note": "An account, eligibility or region error from agy ('account is not eligible for Antigravity ... not available in your location') can be transient and costs no quota. The driver retries once and reports both outcomes as the first line of its report; the lead passes it to the human before doing anything else (AGENTS.md, 'Escalate to a human'). Rerouting the artifact work to a researcher or drafter subagent is the human's call, not the driver's.",
       "skill": "agy - ~/.claude/skills/agy is a junction to .claude/skills/agy/ in glm-agy-cc-proxy; edit it there",
       "cost_tokens": {
         "_note": "measured 2026-09-13",
@@ -181,7 +183,7 @@
 
   "reserved": {
     "haiku": {
-      "assignable": false,
+      "assignable": "false until Haiku 5.5 ships; Haiku 4.5 is below the 5.1 floor",
       "what": "the harness's own service slot - auto mode's command-safety classifier, and similar background calls",
       "leave_as_installed": "ANTHROPIC_DEFAULT_HAIKU_MODEL keeps the harness's own default; it is set by the installation, not by a routing decision",
       "why": "when that slot names a model the session cannot reach, running commands stops working while file reads carry on. The session holding the bad value cannot fix itself, because settings are read once at startup.",
@@ -190,7 +192,7 @@
   },
 
   "unverified": {
-    "glm_vs_opus": "GLM holds the execution slot by decision, not by measurement - nothing here has benchmarked GLM against Opus 5 or Sonnet 5 on the same task. Replace this entry with a number the day someone does.",
+    "glm_vs_opus": "GLM holds the execution slot by decision, not by measurement - nothing here has benchmarked GLM against Opus 5.5 on the same task. Replace this entry with a number the day someone does.",
     "driver_loop_limit": "three worker calls per task is a starting value, not a measured optimum."
   }
 }

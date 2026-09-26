@@ -201,10 +201,11 @@ work therefore runs in three tiers, and the full split with its parameters is in
   final acceptance. Single lookups, single edits, and anything that needs this session's context
   stay here.
 - **Drivers** — subagents that own one delegated task end to end and return a report of a few
-  lines. `glm-driver` (`opus`) writes the worker brief, calls GLM, runs this repo's own smoke-test
+  lines. `glm-driver` (`claude-opus-5-5`) writes the worker brief, calls GLM, runs this repo's own smoke-test
   command itself (the `Commands` table above), re-briefs on failure up to three calls, commits
-  `wip(<scope>)` or reverts, and reports without the diff. `agy-driver` (`sonnet`) prepares a side
-  directory, calls agy once, and returns the artifact's path.
+  `wip(<scope>)` or reverts, and reports without the diff. `agy-driver` (`claude-opus-5-5`; Sonnet 5.5 when it ships) prepares a side
+  directory, calls agy at most twice — one retry after a fixable failure, reporting an account or
+  eligibility error first either way — and returns the artifact's path.
 - **Workers** — separate processes, one self-contained job per call, never the model behind this
   session. **GLM** (`glm-run.py`, Z.AI quota) is Claude Code itself in a child process and does
   ordinary execution: an approved plan, a module sweep, a long draft, a mechanical pass — when the

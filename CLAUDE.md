@@ -85,29 +85,35 @@ before the final recap.
 *Why: on a multi-part task an Opus 5.5 subagent can end its run with a status note instead of the
 next step; a lead that takes the note as the result ships half the task.*
 
-**How the model and effort reach a subagent.** Roles are agent types in `~/.claude/agents/` (or
-`.claude/agents/` of the project, which overrides by name): one file per role, `model` and `effort`
-in its frontmatter. Call the Agent tool with the role's `subagent_type`: it is the only way to set
-effort for a plain subagent — the tool itself takes `model` but no effort; its `model`, when
-given, overrides the definition's (that is how `verifier` runs on `opus` for findings written by
-`fable`). Inside a Workflow script, `agent()` takes `model` and `effort` per call. Without either,
-the subagent inherits this session's model and effort.
+**How the model reaches a subagent.** Roles are agent types in `~/.claude/agents/` (or
+`.claude/agents/` of the project, which overrides by name): one file per role, `model` in its
+frontmatter — a full id (`claude-opus-5-5`) where an alias could resolve below the floor. Call the
+Agent tool with the role's `subagent_type`; its `model`, when given, overrides the definition's
+(that is how `verifier` runs on `claude-opus-5-5` for findings written by `fable`). No role pins
+effort: a subagent runs at the harness default for its model (Fable 5.1 `high`, Opus 5.5
+`medium`), and Workflow `agent()` calls leave `effort` unset too. Without a model, the subagent
+inherits this session's.
 
 **Routing — which kind of work goes to which role, model or worker — lives in
 `.claude/routing.json`, not here.** Read it before the first delegation of a session; it is also
 the file to edit when the split should change, and the file to copy into a project that needs a
-different one. Roles (`model-table-rev: 2026-09`): `glm-driver` (opus), `agy-driver` (sonnet),
-`implementer` (sonnet), `sweeper` (sonnet), `drafter` (sonnet), `reviewer` (opus), `researcher`
-(fable), `verifier` (fable; opus for fable's findings). The pairing and its why are in each role's
-frontmatter and body.
+different one. Roles (`model-table-rev: 2026-09-26`): `glm-driver`, `reviewer`, `agy-driver`,
+`implementer`, `sweeper`, `drafter` (all `claude-opus-5-5`), `researcher` (fable), `verifier`
+(fable; `claude-opus-5-5` for fable's findings). The model floor is generation 5.1: Opus 5,
+Sonnet 5 and Haiku 4.5 are not used. When Sonnet 5.5 and Haiku 5.5 ship, the sonnet-class roles
+(`agy-driver`, `implementer`, `sweeper`, `drafter`) move to Sonnet 5.5 and Haiku 5.5 becomes
+assignable for the cheapest mechanical work. The why of each pairing is in the role's frontmatter
+and body.
 *Why data rather than a table here: routing is a per-project decision, this file is a shared
 contract. A table here gets quietly rewritten by whoever needs a different answer today, and the
 change lands on every project at once.*
 
 Two axes live in that file and are not interchangeable: a **subagent model** is picked from
-`fable | opus | sonnet | haiku` and is started with the Agent tool; a **worker** (GLM, agy) is a
-separate process reached through a wrapper in Bash, from a driver subagent. GLM has no subagent
-form — `model: "glm"` matches nothing.
+`fable | claude-opus-5-5` (Sonnet 5.5 and Haiku 5.5 join when they ship) and is started with the
+Agent tool; a **worker** (GLM, agy) is a separate process reached through a wrapper in Bash, from
+a driver subagent. GLM has no subagent form — `model: "glm"` matches nothing. Until Haiku 5.5,
+haiku is only the harness's own reserved slot, not a role to assign (below, "Do not repoint the
+haiku slot").
 
 **Do not repoint the haiku slot.** It is not a role you assign; the harness calls it for its own
 service work, including auto mode's command-safety classifier. When that slot points at a model
@@ -116,22 +122,25 @@ the session cannot reach, running commands stops working while file reads carry 
 broken, and the cause is one env var set earlier in a file that is read once at session start —
 so the session that has it cannot fix itself by editing the file.*
 
-Model aliases are the harness's (`fable`, `opus`, `sonnet`, `haiku`); full IDs if a tool requires
-them: `claude-fable-5-1`, `claude-opus-5`, `claude-sonnet-5`. GLM is not an alias — it is
-`glm-5.3[1m]`, reachable only through `glm-run.py`. Nothing below Sonnet-class: rechecking a
-weaker model's routine output costs more than the routine.
+Model aliases are the harness's (`fable`, `opus`, `sonnet`, `haiku`), but an alias may resolve
+below the floor, so roles carry full IDs: `claude-fable-5-1` (alias `fable` is current) and
+`claude-opus-5-5`. GLM is not an alias — it is `glm-5.3[1m]`, reachable only through
+`glm-run.py`. Nothing below the 5.1 floor: rechecking a weaker model's routine output costs more
+than the routine.
 
 Hard caps live outside the prompt: `CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH`,
 `CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS` and `CLAUDE_CODE_MAX_SUBAGENTS_PER_SESSION` in the project
-environment (present in the Claude Code binary from 2.1.270; not in the public docs, so re-check
-with `grep -a` on the binary at each revision). Set them
+environment. `…SPAWN_DEPTH` and `…CONCURRENT_SUBAGENTS` are documented on the Opus 5 prompting
+page, and the Agent SDK adds `max_budget_usd`; `…SUBAGENTS_PER_SESSION` is seen only in the binary
+(`grep -a`). Claude Code runs at its latest release here, so re-check all three against the current
+binary at each revision. Set them
 as a ceiling, not as a target — a cap that blocks a normal fan-out does not save the work, it
 moves it into this session where it is re-sent every turn.
 *Why: a cap in the prompt is advisory; a cap in the environment holds when the model disagrees.*
 
 <!--
 Per-model notes (delete when not running that model):
-- Opus 5 as lead: remove any "verify your work" / "double-check" / "use a subagent to verify"
+- Opus 5.5 as lead (notes observed on Opus 5; re-test): remove any "verify your work" / "double-check" / "use a subagent to verify"
   lines — it verifies on its own, and the instruction causes over-verification. Add
   "keep outputs reasonably concise" — effort does not shorten its visible replies.
   On delegation it can sit at either extreme, so tune to what you actually see: spawning agents
@@ -143,7 +152,7 @@ Per-model notes (delete when not running that model):
   can be declined with the `reasoning_extraction` refusal. For an unattended CLI run (nobody
   answers), end the system prompt with the page's early-stop paragraph from the first request;
   leave it out when a human is in the loop.
-- Sonnet 5 as lead: it does not generalise an instruction from one item to the next; state scope
+- Sonnet 5.5 as lead, once it ships (notes observed on Sonnet 5; re-test): it does not generalise an instruction from one item to the next; state scope
   ("apply this to every section"). Remove "summarise after every N tool calls" scaffolding.
 - Fable 5.1 as lead: keep the progress-text line above; remove any "hold findings for the final
   response" line. Ask "are there any bugs in this program?" rather than "does it compile?" —
