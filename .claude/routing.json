@@ -133,7 +133,7 @@
   "parallel": {
     "execution": "worktree-only",
     "rule": "Two GLM calls in one checkout collide: the second refuses on the first's dirty tree, or the drivers revert each other. Run parallel glm-drivers only with `isolation: worktree` in the Agent tool, one worktree and one branch per driver; the lead merges afterwards. Inside one checkout, one driver at a time.",
-    "ceiling": "the CLAUDE_CODE_MAX_* subagent variables in the project environment, listed in CLAUDE.md, plus the SDK's max_budget_usd"
+    "ceiling": "the CLAUDE_CODE_MAX_* subagent variables in the project environment (not in Claude Code's documentation - check them against the current binary), plus the SDK's max_budget_usd"
   },
 
   "workers": {
@@ -187,7 +187,7 @@
       "what": "the harness's own service slot - auto mode's command-safety classifier, and similar background calls",
       "leave_as_installed": "ANTHROPIC_DEFAULT_HAIKU_MODEL keeps the harness's own default; it is set by the installation, not by a routing decision",
       "why": "when that slot names a model the session cannot reach, running commands stops working while file reads carry on. The session holding the bad value cannot fix itself, because settings are read once at startup.",
-      "see": "CLAUDE.md, 'Models and subagents'"
+      "see": "~/.claude/CLAUDE.md, 'Models and subagents'"
     }
   },
 

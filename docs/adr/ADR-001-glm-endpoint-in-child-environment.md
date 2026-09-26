@@ -13,7 +13,7 @@ There are two places those can live, and the choice is not cosmetic.
 
 `GLM/switch-claude.ps1` existed first and writes them into the `env` block of
 `~/.claude/settings.json`. Three facts, all measured on 2026-09-14 and recorded in
-`GLM/README.md`, make that a poor foundation for delegation:
+`docs/incidents.md`, make that a poor foundation for delegation:
 
 - The desktop app reads `ANTHROPIC_DEFAULT_*_MODEL` from that file but **ignores**
   `ANTHROPIC_BASE_URL` for routing — it takes gateway routing from its own third-party inference
@@ -55,11 +55,11 @@ no longer mutually exclusive.
 | Use the switcher for delegation: write `settings.json`, call, restore it | A crash between write and restore leaves the machine in GLM mode. Two sessions delegating at once race on one global file. And since settings are read at startup, the write does not even affect the caller — it buys nothing and risks everything. |
 | Keep the switcher as the only GLM path | Changes every future session including the desktop app's, where it breaks command execution until switched back *and* restarted. Also cannot express "one task on GLM". |
 | Put the Z.AI key in the `settings.json` `env` block permanently | The key sits in plaintext in a file that gets backed up and copied, and it applies to every project on the machine rather than to one call. |
-| An Anthropic-API shim placing GLM under Claude Code as its model | Explicitly out of scope in `AGENTS.md`, and unnecessary: Z.AI is already Anthropic-compatible, so a child process reaches it directly. |
+| An Anthropic-API shim placing GLM under Claude Code as its model | Unnecessary: Z.AI is already Anthropic-compatible, so a child process reaches it directly. (`AGENTS.md` rules out only the analogous shim for `agy`, which cannot work because agy executes its own tools.) |
 
 ## Consequences
 
-- **Accepted cost:** every call pays a fresh process's startup — ~18 000 tokens with tools, ~7 400
+- **Accepted cost:** every call pays a fresh process's startup — ~17 800 tokens with tools, ~7 400
   with `--no-tools` (measured 2026-09-15). There is no session reuse, so a conversation with the
   worker is not possible; each call is one self-contained job. This is the same shape as `agy-run`
   and is a deliberate property, not an oversight.
@@ -70,6 +70,10 @@ no longer mutually exclusive.
 - **Known exposure:** the **project-level** `.claude/settings.json` *is* read, with its `env` block
   and its hooks. Inside this repo that is wanted; pointing `--dir` at an unfamiliar repository
   means executing that repository's settings.
+- **Accepted for the switcher only:** in GLM mode `GLM/switch-claude.ps1` writes the Z.AI key in
+  plaintext into the `env` block of `~/.claude/settings.json`. That is accepted for the interactive
+  switcher, which exists to run a whole session on GLM, and rejected for delegation, which keeps
+  the key in the child environment only.
 - **Rollback cost:** small. Delete `GLM/glm-run.py`, the `glm` skill, the junction
   `~/.claude/skills/glm`, and the `Bash(python C:/Users/cupik/.claude/bin/glm-run.py:*)` entry in
   `~/.claude/settings.json`. Nothing else depends on it, and the switcher continues to work.
@@ -87,8 +91,8 @@ no longer mutually exclusive.
   `CLAUDE_CODE_ENTRYPOINT` in the child environment (`GLM/README.md`, 401 section). An expired or
   revoked key and an exhausted quota remain unexercised.
 - **Measured 2026-09-15:** a large multi-file task was measured end to end — ~296 600 input-side
-  tokens, 263 s, 14 tests to 33 passing on the first attempt. Figures in `GLM/README.md` and
-  `.claude/routing.json`.
+  tokens, 263 s, 14 tests to 33 passing on the first attempt. Figures in `.claude/routing.json`
+  (`workers.glm`) and the `glm` skill.
 
 ## Rules this creates for agents
 

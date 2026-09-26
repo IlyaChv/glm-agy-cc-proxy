@@ -25,7 +25,8 @@ survive the next run. The fifth (agy's stderr) is the wrapper's own and stays op
   `trustedWorkspaces` and workspace access is the intended control, and making the other
   consistent with it.
 - **The OAuth session is protected by policy, not mechanism.** AGENTS.md rule 5
-  ("never touch `~/.gemini/oauth_creds.json`") binds a cooperative agent and nothing else.
+  ("Do not open, print, copy, or commit `~/.gemini/oauth_creds.json`, and do not build anything
+  that reads it.") binds a cooperative agent and nothing else.
   Deny rules in agy's settings do outrank allow, and have been added and tested, but agy
   rewrites that file on its own, so the fence is only as durable as the rewrite allows. What
   would close it: a deny rule that survives agy's rewrite, or `--sandbox` (which blocks

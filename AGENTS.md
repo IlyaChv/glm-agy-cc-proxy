@@ -123,7 +123,7 @@ scripts that assume `pwsh`.
 
 In this repo:
 
-- `AGENTS.md` — this contract, read by Claude Code and `agy` both
+- `AGENTS.md` — this contract, read by Claude Code (and so by the GLM worker); agy does not see it
 - `CLAUDE.md` — Claude Code harness behaviour only; imports this file on its first line
 - `.claude/routing.json` — which work goes to which model or worker; edit this, not any prose table
 - `.claude/skills/agy/` — the `agy` skill: how to delegate to the agy worker; source of the junction
@@ -172,8 +172,8 @@ loads itself when you open a file under one of those paths.
 - **Delegate sweeps and independent tracks; do single lookups yourself.** A repo-wide search, a
   per-module pass, or any question that needs many files read but only a conclusion returned goes
   to a subagent. One lookup, one file, one edit, and verification of your own work stay with you.
-  Which role, model or worker takes what: `.claude/routing.json`; the delegation triggers:
-  `CLAUDE.md`, "Models and subagents".
+  Which role or worker takes what: `.claude/routing.json`; the delegation triggers: the user-level
+  `~/.claude/CLAUDE.md`, "Models and subagents".
   *Why: files read in this session stay in context and are paid for on every later turn; the same
   files read by a subagent are paid once and come back as a paragraph. The reverse is also true —
   a subagent for one grep returns a summary instead of the line you needed.*
@@ -199,13 +199,13 @@ context is the one scarce resource: everything it reads is re-sent on every late
 work therefore runs in three tiers, and the full split with its parameters is in
 `.claude/routing.json`; read it before the first delegation of a session.
 
-- **Lead** (`fable` by default; a per-project parameter): design, plans, the brief for a driver,
+- **Lead** (the model is a per-project parameter in `routing.json`): design, plans, the brief for a driver,
   final acceptance. Single lookups, single edits, and anything that needs this session's context
   stay here.
 - **Drivers** — subagents that own one delegated task end to end and return a report of a few
-  lines. `glm-driver` (`claude-opus-5-5`) writes the worker brief, calls GLM, runs this repo's own smoke-test
+  lines. `glm-driver` writes the worker brief, calls GLM, runs this repo's own smoke-test
   command itself (the `Commands` table above), re-briefs on failure up to three calls, commits
-  `wip(<scope>)` or reverts, and reports without the diff. `agy-driver` (`claude-opus-5-5`) prepares a side
+  `wip(<scope>)` or reverts, and reports without the diff. `agy-driver` prepares a side
   directory, calls agy at most twice — one retry after a fixable failure, reporting an account or
   eligibility error first either way — and returns the artifact's path.
 - **Workers** — separate processes, one self-contained job per call, never the model behind this
@@ -236,8 +236,9 @@ Four constraints hold whatever the brief says:
 lead re-pays them on every turn afterwards. A driver reads them once and hands back a short report.*
 
 The cost figures behind the GLM and agy choice — per-call token floors, the large-multifile-task
-measurements, agy's `--allow-shell` boundary — are in `GLM/README.md`, `.claude/skills/glm/SKILL.md` and `.claude/skills/agy/SKILL.md`;
-`.claude/routing.json` repeats them for orientation only.
+measurements, agy's `--allow-shell` boundary — are in `.claude/skills/glm/SKILL.md` and
+`.claude/skills/agy/SKILL.md`; `.claude/routing.json` → `workers.*.cost_tokens` repeats them for
+orientation only.
 
 ---
 
