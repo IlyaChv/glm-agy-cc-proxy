@@ -374,8 +374,21 @@ def child_env(key):
     # Anthropic auth variable we are not setting ourselves.
     for stale in ("ANTHROPIC_API_KEY", "ANTHROPIC_CUSTOM_HEADERS", "ANTHROPIC_MODEL",
                   "ANTHROPIC_SMALL_FAST_MODEL", "CLAUDE_CODE_USE_BEDROCK",
-                  "CLAUDE_CODE_USE_VERTEX"):
+                  "CLAUDE_CODE_USE_VERTEX", "CLAUDE_CODE_OAUTH_TOKEN"):
         env.pop(stale, None)
+    # A caller started by the desktop app passes on its host-session variables.
+    # With CLAUDE_CODE_ENTRYPOINT=claude-desktop the child takes the host's
+    # auth instead of ANTHROPIC_AUTH_TOKEN and Z.AI answers 401 "token expired or
+    # incorrect" on every one of 11 retries, ~5 minutes (measured 2026-09-26;
+    # dropping that one variable alone fixes it). The rest tie the child to the
+    # host session - its auth refresh and its message socket - which a worker
+    # must not reach.
+    for host in ("CLAUDE_CODE_ENTRYPOINT", "CLAUDE_CODE_SDK_HAS_HOST_AUTH_REFRESH",
+                 "CLAUDE_CODE_OAUTH_SCOPES", "CLAUDE_CODE_MESSAGING_SOCKET",
+                 "CLAUDE_CODE_MESSAGING_TOKEN", "CLAUDE_CODE_HOST_SESSION_ID",
+                 "CLAUDE_CODE_SESSION_ID", "CLAUDE_CODE_CHILD_SESSION",
+                 "CLAUDE_CODE_DESKTOP_APP_VERSION", "CLAUDECODE"):
+        env.pop(host, None)
     return env
 
 

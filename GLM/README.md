@@ -244,6 +244,20 @@ python C:/Users/cupik/.claude/bin/glm-run.py --no-tools --prompt "..."     # б�
 `[claude-code:unrecognized_model]` в stderr по той же причине: клиент не знает `glm-5.3[1m]`.
 На результат не влияет — `modelUsage` в ответе подтверждает и модель, и `contextWindow` 1000000.
 
+### 401 «token expired or incorrect» при рабочем ключе
+
+Наблюдение 2026-09-26. Вызов из сессии десктоп-приложения падал с
+`API Error: 401 token expired or incorrect` после 11 попыток и ~284 с, хотя прямой запрос к
+`https://api.z.ai/api/anthropic/v1/messages` с тем же ключом отвечал 200. Причина — переменная
+`CLAUDE_CODE_ENTRYPOINT=claude-desktop`, которую процесс Claude Code в приложении передаёт всем
+своим дочерним: с ней дочерний `claude` берёт авторизацию хоста вместо `ANTHROPIC_AUTH_TOKEN` и
+отправляет в Z.AI не тот токен. Проверено по одной: без неё вызов проходит за 10 с, без
+`CLAUDE_CODE_SDK_HAS_HOST_AUTH_REFRESH` или `CLAUDE_CODE_OAUTH_SCOPES` — нет. `child_env()`
+теперь снимает её и остальные переменные хост-сессии.
+
+Если 401 вернётся, сначала проверьте ключ прямым запросом, а не пересоздавайте его: ошибка
+одинаково выглядит и для просроченного ключа, и для подменённого токена.
+
 ## Installed copies and junctions
 
 Три пути вне этого репозитория — и при этом часть той же системы:
