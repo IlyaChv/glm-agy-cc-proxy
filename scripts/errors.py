@@ -8,6 +8,7 @@ import re
 SOURCE = re.compile(r"^\s*(glm-run:|agy-run:|error:|\[?api_error|.*api_error_status=)", re.I)
 ACCOUNT = re.compile(
     r"eligib|not available in your location|unsupported (country|region)|region"
+    r"|location is not supported|FAILED_PRECONDITION"
     r"|quota|rate.?limit|insufficient (balance|credit|quota)|billing|payment"
     r"|unauthori[sz]ed|forbidden|token expired|expired or incorrect|invalid (api )?key"
     r"|api_error_status=(401|402|403|429)",

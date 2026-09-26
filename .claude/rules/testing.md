@@ -1,26 +1,18 @@
 ---
 paths:
   - "tests/**"
-  - "**/*.test.*"
-  - "**/*.spec.*"
-  - "**/*_test.*"
-  - "**/test_*.*"
 ---
 
 # Editing tests
 
-<!--
-Loaded when the agent opens a test file. This repo has no test suite yet, so nothing below fires;
-the file is here as the shape to fill in when the first test appears. At that point: set `paths` to
-the real test layout, fill in the command table. The general rules (tests verify the solution, stubs) are already in
-AGENTS.md, "Development rules"; add "new behaviour ships with a test that fails without the
-change" there when the first test lands.
--->
+The suite is `unittest` (stdlib only), one file per area in `tests/`. It never calls `claude`,
+`agy` or the network: the key reader, binary lookup and `subprocess` are stubbed where a test
+reaches them.
 
 | Purpose | Command |
 |---|---|
-| Single test by name | fill this in with the first test file — see the comment above |
-| Whole suite | fill this in with the first test file — see the comment above |
+| Single test by name | `python -m unittest tests.<module>.<Class>.<test>` |
+| Whole suite | `python -m unittest discover -s tests` |
 
 - **Keep a failing test's assertion as strong as it is.** If it fails, the fix goes in the code;
   loosening an assertion, adding a skip/xfail, widening a matcher, or replacing a real call with a

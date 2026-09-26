@@ -104,15 +104,17 @@ slowly, and it is maintained forever.*
 
 | Purpose | Command |
 |---|---|
+| Unit tests — the check that must pass (no network, no real CLIs) | `python -m unittest discover -s tests` |
 | Smoke-test both workers (one tiny call each through its wrapper, a few thousand tokens on each worker's own quota; prints `OK` / `ACCOUNT` / `DOWN`) | `python scripts/check.py` |
 | Available models | `agy models` |
 | Available agy agents | `agy agents` |
 | Wrapper reference | `python AGY/agy-run.py --help`, `python GLM/glm-run.py --help` |
 
-There is no build, no test suite, and no CI here — the deliverables are two Python wrappers
-(`AGY/agy-run.py`, `GLM/glm-run.py`), the GLM switcher (`GLM/switch-claude.ps1`), the plugin's
-skills, driver agents, hooks and scripts, and the two JSON settings files they rely on.
-Verification is running the thing.
+There is no build and no CI here — the deliverables are two Python wrappers
+(`AGY/agy-run.py`, `GLM/glm-run.py`) and the code they share (`lib/workers_common.py`), the GLM
+switcher (`GLM/switch-claude.ps1`), the plugin's skills, driver agents, hooks and scripts, and the
+two JSON settings files they rely on. The unit tests cover the wrappers' logic with the CLIs
+stubbed; verification of a worker is still running the thing (`python scripts/check.py`).
 
 Prefer CLI tools already on this machine (`git`, `rg`, `python`) over adding anything. Note that
 `jq` and PowerShell 7 (`pwsh`) are **not** installed: parse JSON with `python`, and do not write
@@ -138,6 +140,9 @@ In this repo:
 - `.claude/rules/` — path-scoped rules, loaded only when a matching file is opened
 - `docs/adr/` — architectural decisions; `ADR-INDEX.md` is the only maintained list of them
 - `docs/templates/` — task brief, ADR, memory entry
+- `lib/workers_common.py` — code both wrappers import (guards, change report, process cleanup,
+  payload parsing, exit codes)
+- `tests/` — `unittest` suite for the wrappers, `lib/` and `scripts/errors.py`
 - `AGY/` — versioned source of the agy wrapper (`agy-run.py`) and its README on the guard's limits
 - `GLM/` — `glm-run.py` (GLM worker) and `switch-claude.ps1` (switches Claude Code itself to Z.AI);
   see its README

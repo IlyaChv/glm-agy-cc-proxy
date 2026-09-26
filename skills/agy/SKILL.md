@@ -41,11 +41,11 @@ already passed as `--prompt-file`.
 | `--effort` | `low` / `medium` / `high` |
 | `--agent` | one of agy's own agents (`agy agents` lists them), e.g. `Senior Developer` |
 | `--allow-shell` | let agy run terminal commands; needed for any shell work, and it removes every other boundary (see below) |
-| `--no-tools` | pure-reasoning prompt: no sandbox, no accept-edits, no skip-permissions. Not a read-only switch |
+| `--no-tools` | read-only reasoning call: `--mode plan` with the sandbox on, no accept-edits, no skip-permissions; skips the clean-tree check because nothing is written. Refused with `--allow-shell`, `--mode accept-edits` or `--no-sandbox` |
 | `--force` | skip the clean-tree check |
 | `--timeout-min` | default 5 |
 | `--no-sandbox` | do not pass `--sandbox` (it is on by default) |
-| `--mode accept-edits\|plan` | agy's execution mode; defaults to `accept-edits` unless `--no-tools` or `--allow-shell` is given, in which case no `--mode` is passed unless set explicitly |
+| `--mode accept-edits\|plan` | agy's execution mode; defaults to `accept-edits`. `--no-tools` always runs `plan`; with `--allow-shell` no `--mode` is passed unless set explicitly |
 | `--add-dir` | additional workspace directory, repeatable; each must be a clean git repo too |
 
 ## What the default does, and why
@@ -80,8 +80,10 @@ terminal command" is usually the whole fix.
 
 `--add-dir` exists but was not exercised.
 
-Result: the answer on stdout, one `agy-run: status=... in=... out=...` line on stderr, exit code 0
-only on success.
+Result: the answer on stdout, one `agy-run: status=... in=... out=...` line on stderr (the model
+is the one agy reports, else the one requested). Exit codes: **0** success; **1** agy failed or
+reported an error; **2** refused before any call (bad arguments, forbidden directory, dirty tree,
+bad or non-UTF-8 prompt file, missing binary, command line too long); **3** timeout.
 
 **Tools are on by default, and that is not really optional.** Headless mode cannot prompt for a
 permission, so it auto-denies — and an auto-denied tool call comes back as `status=SUCCESS` with an
@@ -90,7 +92,8 @@ empty answer (antigravity-cli#548). By default the wrapper runs agy with `--mode
 rather than silently denied; `--dangerously-skip-permissions` appears only when `--allow-shell` is
 passed, because agy's `command()` grants are ignored in headless mode and that flag is the only way
 to give it a shell. Either way the wrapper turns an empty answer into a non-zero exit so it cannot
-pass for success. `--no-tools` is for prompts that need no file access whatsoever.
+pass for success. `--no-tools` is for prompts that must not write anything: it runs `--mode plan`
+with the sandbox on, so agy can still read but not edit.
 
 ## What a call costs
 

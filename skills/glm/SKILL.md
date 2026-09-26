@@ -49,8 +49,10 @@ about keeping your own message readable, nothing more.
 | `--mode` | `acceptEdits` (default) / `plan` / `dontAsk` / `manual` |
 | `--add-dir` | additional workspace directory, repeatable; each must be a clean git repo too |
 
-Result: the answer on stdout, a `glm-run: model=... in=... out=...` line on stderr, exit code 0
-only on success.
+Result: the answer on stdout, a `glm-run: model=... in=... out=...` line on stderr. Exit codes:
+**0** success; **1** the worker failed or reported an error; **2** refused before any call (bad
+arguments, forbidden directory, dirty tree, bad or non-UTF-8 prompt file, missing key or binary);
+**3** timeout.
 
 ## What the default does, and why
 
@@ -229,8 +231,9 @@ constrains no argument - this check is the floor under that. `GLM_ALLOWED_ROOTS`
 (semicolon-separated) narrows it further.
 
 `GLM_CLAUDE_BIN` (absolute path to a `claude.exe`) makes the wrapper use that executable instead
-of resolving the npm shim or falling back to the desktop app's copy; a value that is not a file is
-ignored with a warning. Set it only when the resolution picks the wrong binary.
+of resolving the npm shim or falling back to the desktop app's copy; a value that is not a file
+stops the call (exit 2) instead of falling back. Set it only when the resolution picks the wrong
+binary.
 
 Two things the wrapper prints, both worth reading: **before** the call, the gitignored paths in
 each working directory, which are outside the safety net; **after** it, exactly which paths

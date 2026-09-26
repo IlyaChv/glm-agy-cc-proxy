@@ -5,7 +5,17 @@
 this repository, with no installed copy: the driver calls
 `python "${CLAUDE_PLUGIN_ROOT}/AGY/agy-run.py" ...`, the same contract as `GLM/glm-run.py`. How
 to delegate, what a call costs, and how to write the brief live in the `agy` skill
-(`skills/agy/`).
+(`skills/agy/`). The code both wrappers share (directory and clean-tree guards, change report,
+process cleanup, payload parsing) is in `lib/workers_common.py`; `python -m unittest discover -s
+tests` exercises it without calling agy.
+
+Exit codes: **0** success; **1** agy failed or reported an error; **2** refused before any call
+(bad arguments, forbidden directory, dirty tree, bad or non-UTF-8 prompt file, missing binary,
+command line too long); **3** timeout.
+
+`--no-tools` is a read-only reasoning call: `--mode plan` with `--sandbox`, no accept-edits and no
+`--dangerously-skip-permissions`. Nothing is written, so the clean-tree check and the change report
+are skipped; combining it with `--allow-shell`, `--mode accept-edits` or `--no-sandbox` is refused.
 
 ## Known limits of the guard
 
@@ -50,8 +60,8 @@ Outside this repo, and just as much part of the system:
 
 - `~/.claude/skills/workers` — a junction to this repository, through which Claude Code loads it
   in place as the plugin `workers@skills-dir`. The plugin is off by default and turned on per
-  project with `python tools/install.py workers <project> on` in `agent rules` (`off` turns it
-  off); the `workers:agy` skill and the `workers:agy-driver` agent exist only where it is on. The
+  project with `claude plugin enable workers@skills-dir --scope local`, run in that project
+  (`disable` turns it off); the `workers:agy` skill and the `workers:agy-driver` agent exist only where it is on. The
   content is edited here, never through the junction path; run `/reload-plugins` after an edit.
 - `~/.claude/settings.json` — `permissions.allow` entries naming
   `python "C:/Users/cupik/.claude/skills/workers/AGY/agy-run.py"` (and the same for
