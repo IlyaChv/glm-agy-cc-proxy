@@ -26,9 +26,12 @@ $glmEnv = [ordered]@{
     "ANTHROPIC_DEFAULT_SONNET_MODEL"           = "glm-5.3[1m]"
     "ANTHROPIC_DEFAULT_OPUS_MODEL"             = "glm-5.3[1m]"
     "CLAUDE_CODE_AUTO_COMPACT_WINDOW"          = "1000000"
-    "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC" = 1
+    "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC" = "1"
     "API_TIMEOUT_MS"                           = "3000000"
 }
+
+# Ключи, которые режим GLM убирает: иначе Claude Code отправит их в Z.AI рядом с ключом Z.AI.
+$glmRemoved = @("ANTHROPIC_API_KEY", "CLAUDE_CODE_OAUTH_TOKEN")
 
 function Set-JsonProp {
     param($Object, [string]$Name, $Value)
@@ -47,10 +50,39 @@ function Read-Settings {
     return ($raw | ConvertFrom-Json)
 }
 
+# Пишем во временный файл рядом, проверяем разбор и только потом подменяем settings.json.
 function Save-Settings {
     param($Settings)
     $json = $Settings | ConvertTo-Json -Depth 100
-    Write-Utf8NoBom -Path $settingsFile -Content $json
+    $tmp = "$settingsFile.tmp"
+    try {
+        Write-Utf8NoBom -Path $tmp -Content $json
+        (Get-Content $tmp -Raw -Encoding UTF8) | ConvertFrom-Json -ErrorAction Stop | Out-Null
+        Move-Item -LiteralPath $tmp -Destination $settingsFile -Force -ErrorAction Stop
+        return $true
+    } catch {
+        Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue
+        Write-Host "Не удалось записать settings.json — файл оставлен без изменений: $settingsFile" -ForegroundColor Red
+        return $false
+    }
+}
+
+# Режим GLM определяется только по разобранному env.ANTHROPIC_BASE_URL.
+function Test-GlmSettings {
+    param($Settings)
+    return ($null -ne $Settings) -and ($null -ne $Settings.env) -and ("$($Settings.env.ANTHROPIC_BASE_URL)" -match "api\.z\.ai")
+}
+
+# Ввод ключа без эха; в файл он пишется тем же открытым текстом, что читает glm-run.py.
+function Read-ApiKey {
+    param([string]$Prompt)
+    $secure = Read-Host $Prompt -AsSecureString
+    $bstr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure)
+    try {
+        return [Runtime.InteropServices.Marshal]::PtrToStringBSTR($bstr).Trim()
+    } finally {
+        [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr)
+    }
 }
 
 # Сначала claude из PATH; если его нет — бинарник внутри десктоп-приложения, в папке с номером
@@ -83,8 +115,12 @@ function Get-CurrentMode {
     if (-not (Test-Path $settingsFile)) {
         return "Anthropic (Официальный)"
     }
-    $content = Get-Content $settingsFile -Raw -Encoding UTF8
-    if ($content -match "api\.z\.ai") {
+    try {
+        $settings = Read-Settings
+    } catch {
+        return "Неизвестно (settings.json не разбирается)"
+    }
+    if (Test-GlmSettings $settings) {
         return "Z.AI GLM"
     }
     return "Anthropic (Пользовательский)"
@@ -98,8 +134,7 @@ function Switch-To-GLM {
 
     if ([string]::IsNullOrWhiteSpace($apiKey)) {
         Write-Host "Z.AI API ключ не найден." -ForegroundColor Yellow
-        $apiKey = Read-Host "Введите ваш Z.AI API Key"
-        $apiKey = $apiKey.Trim()
+        $apiKey = Read-ApiKey "Введите ваш Z.AI API Key"
         if ([string]::IsNullOrWhiteSpace($apiKey)) {
             Write-Host "Ключ не может быть пустым!" -ForegroundColor Red
             return
@@ -108,18 +143,18 @@ function Switch-To-GLM {
         Write-Host "Ключ успешно сохранен в $keyFile" -ForegroundColor Green
     }
 
-    # Если уже был settings.json не от Z.AI, сохраняем его резервную копию
-    if ((Test-Path $settingsFile) -and ((Get-Content $settingsFile -Raw -Encoding UTF8) -notmatch "api\.z\.ai")) {
-        Copy-Item $settingsFile $backupFile -Force
-        Write-Host "Текущий settings.json сохранен в резервную копию." -ForegroundColor Gray
-    }
-
     try {
         $settings = Read-Settings
     } catch {
         Write-Host "settings.json не разбирается как JSON — переключение отменено." -ForegroundColor Red
         Write-Host "Файл оставлен без изменений: $settingsFile" -ForegroundColor Red
         return
+    }
+
+    # Резервную копию снимаем только с разобранного файла, который ещё не в режиме GLM
+    if (($null -ne $settings) -and -not (Test-GlmSettings $settings)) {
+        Copy-Item $settingsFile $backupFile -Force
+        Write-Host "Текущий settings.json сохранен в резервную копию." -ForegroundColor Gray
     }
     if ($null -eq $settings) { $settings = [PSCustomObject]@{} }
 
@@ -133,9 +168,10 @@ function Switch-To-GLM {
         if ($name -eq "ANTHROPIC_AUTH_TOKEN") { $value = $apiKey } else { $value = $glmEnv[$name] }
         Set-JsonProp -Object $envBlock -Name $name -Value $value
     }
+    foreach ($name in $glmRemoved) { $envBlock.PSObject.Properties.Remove($name) }
     Set-JsonProp -Object $settings -Name "env" -Value $envBlock
 
-    Save-Settings -Settings $settings
+    if (-not (Save-Settings -Settings $settings)) { return }
     Write-Host "`n[OK] Claude Code успешно переключен на Z.AI GLM!" -ForegroundColor Green
     Write-Host "Остальные настройки (permissions, autoMode) сохранены." -ForegroundColor Gray
     Show-RestartHint
@@ -161,9 +197,10 @@ function Switch-To-Anthropic {
         return
     }
 
-    # Блок env восстанавливаем из копии целиком: если какие-то из этих ключей
-    # стояли у вас до GLM, они вернутся со своими прежними значениями.
+    # Убираем ключи, которыми управляет режим GLM, и возвращаем их значения из копии;
+    # остальные ключи env, в том числе добавленные в режиме GLM, остаются.
     $restoredFromBackup = $false
+    $backupEnv = $null
     if (Test-Path $backupFile) {
         try {
             $backup = (Get-Content $backupFile -Raw -Encoding UTF8) | ConvertFrom-Json
@@ -171,30 +208,31 @@ function Switch-To-Anthropic {
             $backup = $null
         }
         if ($null -ne $backup) {
-            if ($backup.PSObject.Properties.Name -contains "env") {
-                Set-JsonProp -Object $settings -Name "env" -Value $backup.env
-            } else {
-                $settings.PSObject.Properties.Remove("env")
-            }
+            $backupEnv = $backup.env
             $restoredFromBackup = $true
         }
     }
 
-    if (-not $restoredFromBackup) {
-        if ($settings.PSObject.Properties.Name -contains "env") {
-            $envBlock = $settings.env
-            if ($null -ne $envBlock) {
-                foreach ($name in $glmEnv.Keys) { $envBlock.PSObject.Properties.Remove($name) }
-                if (@($envBlock.PSObject.Properties).Count -eq 0) {
-                    $settings.PSObject.Properties.Remove("env")
-                }
-            }
+    if (($settings.PSObject.Properties.Name -contains "env") -and ($null -ne $settings.env)) {
+        $envBlock = $settings.env
+    } else {
+        $envBlock = [PSCustomObject]@{}
+    }
+    foreach ($name in @($glmEnv.Keys) + $glmRemoved) {
+        $envBlock.PSObject.Properties.Remove($name)
+        if (($null -ne $backupEnv) -and ($backupEnv.PSObject.Properties.Name -contains $name)) {
+            Set-JsonProp -Object $envBlock -Name $name -Value $backupEnv.$name
         }
     }
+    if (@($envBlock.PSObject.Properties).Count -eq 0) {
+        $settings.PSObject.Properties.Remove("env")
+    } else {
+        Set-JsonProp -Object $settings -Name "env" -Value $envBlock
+    }
 
-    Save-Settings -Settings $settings
+    if (-not (Save-Settings -Settings $settings)) { return }
     if ($restoredFromBackup) {
-        Write-Host "`n[OK] Блок env восстановлен из резервной копии." -ForegroundColor Green
+        Write-Host "`n[OK] Ключи Z.AI удалены, прежние значения этих ключей возвращены из резервной копии." -ForegroundColor Green
     } else {
         Write-Host "`n[OK] Ключи Z.AI удалены из settings.json." -ForegroundColor Green
     }
@@ -203,8 +241,7 @@ function Switch-To-Anthropic {
 }
 
 function Change-ApiKey {
-    $newKey = Read-Host "Введите новый Z.AI API Key"
-    $newKey = $newKey.Trim()
+    $newKey = Read-ApiKey "Введите новый Z.AI API Key"
     if (-not [string]::IsNullOrWhiteSpace($newKey)) {
         Write-Utf8NoBom -Path $keyFile -Content $newKey
         Write-Host "Ключ обновлен!" -ForegroundColor Green
