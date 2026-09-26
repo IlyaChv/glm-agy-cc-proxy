@@ -9,7 +9,9 @@ two sections an agent gets wrong when writing its own brief.
 Test before sending: show the brief to a colleague with no context on the task. If they would be
 confused, the agent will be too. Say what to do, not only what to avoid; give the reason where a
 rule looks arbitrary. Describe the outcome you need, not a step-by-step thinking procedure — the
-model plans better than a hand-written plan.
+model plans better than a hand-written plan. Do not ask for the reasoning to be written out in the
+reply either: effort sets how much the model thinks, and on Opus 5.5 such a request can be refused
+as `reasoning_extraction`.
 
 Order matters: long material (specs, logs, contract excerpts) goes at the top, the task and the
 criteria at the bottom. Quality drops when the question is buried above a wall of data.
@@ -26,20 +28,20 @@ otherwise. Sections marked "for a defect" are deleted for a feature or migration
 
 Decisions in these documents are settled (`AGENTS.md`, "Architecture decisions").
 
-<!-- Long excerpts go right here, each in its own tag, so the agent can tell material from
-instructions. Fill the block below, or delete it if the task has no long material.
+<!-- Long excerpts go right here, so the agent can tell material from instructions. Wrap each
+verbatim excerpt in a <pasted_content> block whose opening and closing tags carry the same short
+random id, a new id per block, each tag on its own line; the source goes on the line above it.
+Fill the block below, or delete it if the task has no long material.
 
 For a long excerpt, ask in the Task section for the relevant lines to be quoted back first (in
 <quotes> tags) before the work starts. Ready to paste into the Task section: "Before you start,
 quote the lines from <file> that the task depends on, verbatim, in a <quotes> block; if none
 apply, write 'No relevant quotes found' and stop. Use only that material and the files named here
 — where you need something not in them, say so instead of supplying it from memory." -->
-<documents>
-  <document index="1">
-    <source><error.log, <timestamp>, verbatim></source>
-    <document_content><...verbatim...></document_content>
-  </document>
-</documents>
+Source: <error.log, <timestamp>, verbatim>
+<pasted_content id="<4 random characters>">
+<...verbatim...>
+</pasted_content id="<the same id>">
 
 ## Task
 

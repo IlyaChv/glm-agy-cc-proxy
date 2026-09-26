@@ -77,6 +77,14 @@ it here.
 Spawn subagents in the background and keep working on independent parts; wait only when the next
 step needs their result. If one subagent can do the task, use one rather than several.
 
+A subagent's final message is a report, not proof that its task is done. Check it against the
+brief; if items are still open and no blocker is named, continue that subagent with SendMessage,
+naming the open items — at most two continuations, then treat it as stuck and say so. While a
+subagent or a background command is still running, the task is not done: wait for its result
+before the final recap.
+*Why: on a multi-part task an Opus 5.5 subagent can end its run with a status note instead of the
+next step; a lead that takes the note as the result ships half the task.*
+
 **How the model and effort reach a subagent.** Roles are agent types in `~/.claude/agents/` (or
 `.claude/agents/` of the project, which overrides by name): one file per role, `model` and `effort`
 in its frontmatter. Call the Agent tool with the role's `subagent_type`: it is the only way to set
@@ -129,6 +137,12 @@ Per-model notes (delete when not running that model):
   On delegation it can sit at either extreme, so tune to what you actually see: spawning agents
   for trivia means the damping above is too weak, while doing every sweep in-session means the
   triggers are not firing and any leftover "delegate sparingly" wording should go.
+  Documented on the Opus 5.5 page: its default effort `medium` matches Opus 5 at `high`; raise to
+  `xhigh`/`max` only for a measured gain, and lower effort rather than adding "think less" lines.
+  Remove "think carefully" lines and any request to write reasoning out in the reply — the latter
+  can be declined with the `reasoning_extraction` refusal. For an unattended CLI run (nobody
+  answers), end the system prompt with the page's early-stop paragraph from the first request;
+  leave it out when a human is in the loop.
 - Sonnet 5 as lead: it does not generalise an instruction from one item to the next; state scope
   ("apply this to every section"). Remove "summarise after every N tool calls" scaffolding.
 - Fable 5.1 as lead: keep the progress-text line above; remove any "hold findings for the final
