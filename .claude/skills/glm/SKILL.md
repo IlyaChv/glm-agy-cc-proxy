@@ -205,7 +205,8 @@ retry once to tell transient from blocked.
 | What you see | What it means |
 |---|---|
 | `N tool call(s) were denied rather than prompted for` | the task needed a permission the default posture does not grant. If it genuinely needs a terminal, re-run with `--allow-shell`; otherwise narrow the brief |
-| `the worker produced no output at all` | most likely an auth failure against the Z.AI endpoint. **This path has not been exercised** - the message is a reasoned guess, so read the stderr above it rather than trusting the wording |
+| `the worker produced no output at all` | a stub `claude.exe` (`claude --version` fails) or a failure the payload never recorded; read the stderr above it rather than trusting the wording |
+| `api_error_status=401` and `401 token expired or incorrect`, after ~5 minutes | an auth error: report it to the user at once. Observed 2026-09-26 with a valid key, caused by the desktop app's `CLAUDE_CODE_ENTRYPOINT` leaking into the child; the wrapper now drops it. If it recurs, the installed copy in `~/.claude/bin` may predate that fix - say so rather than asking for a new key |
 | `did not return within Ns` | a stuck tool call, not a slow model - the worker's own request timeout is far longer. Narrow the task or raise `--timeout-min` deliberately |
 | `exited N despite reporting success` | the child died after flushing output; the answer may be truncated. Treat the run as failed |
 | `spawned N subagent(s) despite the depth cap` | the cap is not holding. Tell the user - this is a change in the tool, not a task problem |
