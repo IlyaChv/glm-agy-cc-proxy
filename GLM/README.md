@@ -60,6 +60,23 @@ Claude Code читает `settings.json` один раз, при старте с
 
 То же верно и в обратную сторону: пункт 1 не действует на уже запущенные сессии.
 
+### Новой сессии тоже мало — перезапускайте приложение целиком
+
+Наблюдение 2026-09-26. Процесс Claude Code, запущенный из приложения в 11:39, после пункта 1 в
+11:44 получил ключи Z.AI **в собственное окружение**: приложение подхватывает блок `env` на лету.
+После пункта 2 в 11:46 файл снова был чист, а процесс продолжал держать `ANTHROPIC_AUTH_TOKEN`
+(ключ Z.AI), `ANTHROPIC_DEFAULT_*_MODEL=glm-5.3*`, `API_TIMEOUT_MS`,
+`CLAUDE_CODE_AUTO_COMPACT_WINDOW` и `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC`. Удаление ключа из
+файла не снимает его с процесса. Всё, что запущено из такого процесса, включая терминал, наследует
+эти значения, и `claude` в этом терминале уходит на `api.anthropic.com` с ключом Z.AI, так что
+войти через `/login` не получается.
+
+`settings.json`, переменные Windows и профили PowerShell при этом чистые — искать на диске нечего.
+
+Лечится так: закрыть приложение полностью, включая иконку в трее, и открыть заново. Скрипт теперь
+сам напоминает об этом после пунктов 1 и 2, если видит запущенный `claude`, а пункт 3 в режиме
+Anthropic перед запуском убирает ключи Z.AI из окружения своего окна.
+
 ## Установка отдельного CLI: postinstall обязателен
 
 `npm i -g @anthropic-ai/claude-code` под npm с политикой `allowScripts` не доводит установку до
@@ -73,7 +90,21 @@ Claude Code читает `settings.json` один раз, при старте с
 npm install -g --allow-scripts=@anthropic-ai/claude-code @anthropic-ai/claude-code
 ```
 
-Проверка — `claude --version`, ожидается `2.1.270 (Claude Code)`.
+Проверка — `claude --version`, ожидается `<версия> (Claude Code)`.
+
+**Автообновление этот флаг не передаёт.** 2026-09-26 Claude Code сам обновился с 2.1.270 на
+2.1.283 командой `npm install --global @anthropic-ai/claude-code@2.1.283`, npm заблокировал
+postinstall («install scripts blocked because they are not covered by allowScripts»), и
+`bin\claude.exe` снова стал заглушкой на 500 байт — `claude` перестал запускаться вовсе. Поэтому
+разрешение выдано один раз на уровне пользователя, в `~/.npmrc`:
+
+```
+npm config set allow-scripts=@anthropic-ai/claude-code --location=user
+```
+
+Проверено тем же `npm install --global` без флагов: postinstall отработал с `code: 0`, бинарник
+245 МБ, `claude --version` отвечает. Если заглушка всё же вернулась — починка на месте:
+`node install.cjs` в `%APPDATA%\npm\node_modules\@anthropic-ai\claude-code`.
 
 ## Если нужен GLM именно в десктоп-приложении
 

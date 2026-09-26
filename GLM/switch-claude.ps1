@@ -70,6 +70,15 @@ function Get-ClaudeExe {
     return $null
 }
 
+# Десктоп-приложение подхватывает env из settings.json на лету, а когда ключи из файла удаляют,
+# со своего процесса их не снимает: открытые из него терминалы наследуют прежние значения.
+function Show-RestartHint {
+    if (Get-Process -Name claude -ErrorAction SilentlyContinue) {
+        Write-Host "Claude сейчас запущен. Закройте его полностью, включая иконку в трее, и откройте заново:" -ForegroundColor Yellow
+        Write-Host "до перезапуска он и открытые из него терминалы держат прежние переменные env." -ForegroundColor Yellow
+    }
+}
+
 function Get-CurrentMode {
     if (-not (Test-Path $settingsFile)) {
         return "Anthropic (Официальный)"
@@ -129,6 +138,7 @@ function Switch-To-GLM {
     Save-Settings -Settings $settings
     Write-Host "`n[OK] Claude Code успешно переключен на Z.AI GLM!" -ForegroundColor Green
     Write-Host "Остальные настройки (permissions, autoMode) сохранены." -ForegroundColor Gray
+    Show-RestartHint
 }
 
 function Switch-To-Anthropic {
@@ -136,6 +146,7 @@ function Switch-To-Anthropic {
         if (Test-Path $backupFile) {
             Copy-Item $backupFile $settingsFile -Force
             Write-Host "`n[OK] settings.json восстановлен из резервной копии." -ForegroundColor Green
+            Show-RestartHint
         } else {
             Write-Host "`n[OK] Уже официальный Anthropic: settings.json отсутствует." -ForegroundColor Green
         }
@@ -188,6 +199,7 @@ function Switch-To-Anthropic {
         Write-Host "`n[OK] Ключи Z.AI удалены из settings.json." -ForegroundColor Green
     }
     Write-Host "Остальные настройки (permissions, autoMode) сохранены." -ForegroundColor Gray
+    Show-RestartHint
 }
 
 function Change-ApiKey {
@@ -220,6 +232,7 @@ while ($true) {
     }
     Write-Host "Действует на: терминальный claude (новый запуск)." -ForegroundColor DarkGray
     Write-Host "Вкладка Code в десктоп-приложении не переключается — см. README.md" -ForegroundColor DarkGray
+    Write-Host "После смены режима перезапустите десктоп-приложение целиком, включая трей." -ForegroundColor DarkGray
     Write-Host "----------------------------------------"
     Write-Host "1. Переключить на Z.AI GLM"
     Write-Host "2. Переключить на Anthropic (Оригинальный)"
@@ -245,6 +258,10 @@ while ($true) {
                 Write-Host "`nclaude не найден: ни в PATH, ни внутри десктоп-приложения." -ForegroundColor Red
                 Write-Host "Установите CLI отдельно, либо запускайте claude из своего терминала." -ForegroundColor Red
             } else {
+                if ((Get-CurrentMode) -ne "Z.AI GLM") {
+                    # Окно могло унаследовать ключи Z.AI от десктоп-приложения — в claude их не передаём.
+                    foreach ($name in $glmEnv.Keys) { Remove-Item "Env:$name" -ErrorAction SilentlyContinue }
+                }
                 Write-Host "`nЗапуск Claude Code: $exe" -ForegroundColor Cyan
                 & $exe
             }
