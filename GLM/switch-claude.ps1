@@ -18,7 +18,7 @@ function Write-Utf8NoBom {
 }
 
 # Ключи, которые добавляет режим GLM. Всё остальное в settings.json не трогается:
-# permissions.allow (в том числе разрешение на agy-run) и autoMode переживают переключение.
+# permissions.allow (в том числе разрешения на agy-run и glm-run) и autoMode переживают переключение.
 $glmEnv = [ordered]@{
     "ANTHROPIC_BASE_URL"                       = "https://api.z.ai/api/anthropic"
     "ANTHROPIC_AUTH_TOKEN"                     = ""
@@ -53,8 +53,8 @@ function Save-Settings {
     Write-Utf8NoBom -Path $settingsFile -Content $json
 }
 
-# Отдельного claude в PATH на этой машине нет: бинарник лежит внутри десктоп-приложения,
-# в папке с номером версии, который меняется при обновлении. Берём самую свежую.
+# Сначала claude из PATH; если его нет — бинарник внутри десктоп-приложения, в папке с номером
+# версии, который меняется при обновлении. Берём самую свежую.
 function Get-ClaudeExe {
     $onPath = Get-Command claude -ErrorAction SilentlyContinue
     if ($onPath) { return $onPath.Source }
@@ -256,7 +256,7 @@ while ($true) {
             $exe = Get-ClaudeExe
             if ($null -eq $exe) {
                 Write-Host "`nclaude не найден: ни в PATH, ни внутри десктоп-приложения." -ForegroundColor Red
-                Write-Host "Установите CLI отдельно, либо запускайте claude из своего терминала." -ForegroundColor Red
+                Write-Host "Установите CLI отдельно (с --allow-scripts, см. README.md), либо запускайте claude из своего терминала." -ForegroundColor Red
             } else {
                 if ((Get-CurrentMode) -ne "Z.AI GLM") {
                     # Окно могло унаследовать ключи Z.AI от десктоп-приложения — в claude их не передаём.

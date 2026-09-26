@@ -35,7 +35,7 @@ already passed as `--prompt-file`.
 |---|---|
 | `--dir` | working directory for agy; always pass it explicitly |
 | `--prompt` / `--prompt-file` | the brief (mutually exclusive, one is required) |
-| `--model` | default `gemini-3.8-flash-high`; `agy models` lists the rest (Gemini 3.1 Pro, Claude Sonnet/Opus 4.6, GPT-OSS 120B) |
+| `--model` | default `gemini-3.8-flash-high` (the wrapper's `DEFAULT_MODEL`); `agy models` for the current list |
 | `--effort` | `low` / `medium` / `high` |
 | `--agent` | one of agy's own agents: `Senior Developer`, `Technical Writer`, `UI Designer` |
 | `--allow-shell` | let agy run terminal commands; needed for any shell work, and it removes every other boundary (see below) |
@@ -150,11 +150,11 @@ agy starts with no memory of this conversation. The brief carries everything:
 The brief travels in argv and is visible in the process list to any process on this machine while
 the call runs, whether passed inline or via `--prompt-file`; nothing secret goes into a brief.
 
-**Leave agy nothing to discover.** On the default path a brief that makes it look around fails, and
-it costs a full call to find out. Asked to "read AGENTS.md in the current working directory" it
-reached for a shell to locate the file and was denied; the identical task with the absolute path
-plus "do not list the directory, do not search, do not run any terminal command" succeeded. So:
-absolute paths for every file named, and say outright that no shell is needed. The same wording
+**Leave agy nothing to discover:** absolute paths for every file named, and say outright that no
+shell is needed ("do not list the directory, do not search, do not run any terminal command").
+*Why:* on the default path a brief that makes agy look around fails and costs a full call to find
+out — a relative "read AGENTS.md in the current working directory" reaches for a shell and is
+denied, while the same task with the absolute path and that sentence succeeds. The same wording
 prevents the silent no-op in Guard rails.
 
 If `--dir` holds an `AGENTS.md`, agy reads it on its own - project rules do not need repeating. A
@@ -179,25 +179,27 @@ If an input named here is missing or unreadable, or a criterion cannot be met, s
 answer as the first line, do what does not depend on it, and stop - do not substitute a guess.
 </example>
 
-## Delegating code work
+## Delegating a code artifact (in the side directory)
 
-The loop as measured on 2026-09-13. Each step is here because skipping it has a known failure:
+The loop, as measured. It runs in the side directory the driver prepared (see "agy never edits a
+project's working tree" above); bringing the result into the project is a separate edit by the
+lead. Each step is here because skipping it has a known failure:
 
-1. **Commit first.** The wrapper refuses on a dirty tree, and that refusal is what makes the whole
-   delegation revertible with `git checkout .`. In active development the tree is rarely clean, so a
-   checkpoint commit is the standing cost of working this way - not something to route around with
-   `--force`. Generated files (`__pycache__`, build output) dirty the tree too: gitignore them, and
-   note that doing so also puts them outside the guard.
+1. **Commit the inputs first.** The wrapper refuses on a dirty tree, and that refusal is what makes
+   the call revertible with `git checkout .` in the side directory - not something to route around
+   with `--force`. Generated files (`__pycache__`, build output) dirty the tree too: gitignore them,
+   and note that doing so also puts them outside the guard.
 2. **Put the acceptance criteria in the brief** - the exact command that must pass, the public names
    that must keep working, what must not change - and say that you will run it and agy should not.
    Everything else follows "Writing the brief" above: absolute paths, nothing left to discover, no
    shell needed.
 3. **Read the change report** the wrapper prints after the run. Nothing listed after a write task
    means the work did not happen, whatever the answer says.
-4. **Run the project's own verification yourself** - tests, linter, type-checker. agy reporting
+4. **Run the verification yourself, in the side directory** - tests, linter, type-checker. agy reporting
    success is not evidence: it answers from what it wrote, not from what runs. This is the step that
    turns a delegated diff into a result you can defend.
-5. **Read the diff, then keep or revert.** Commit it, or `git checkout .` and re-brief.
+5. **Read the diff, then keep or revert.** Commit it in the side directory and return the path, or
+   `git checkout .` and re-brief.
 
 Raise `--timeout-min` above the default 5 for multi-file work: the measured task took 139 s, and
 that was a small project.
@@ -222,7 +224,9 @@ that was a small project.
   the task needs `--allow-shell`, `write_file` means the target is outside the workspace,
   `read_file` means a grant is missing or a deny rule blocked it, `escalate_admin` means a command
   tried to leave the sandbox. A timeout means a hung call instead. **Do not retry the same call
-  unchanged** - act on what it named, reformulate, or do it in this session.
+  unchanged** — except an account, eligibility, quota, auth or region error, which is reported at
+  once and retried once to tell transient from blocked; otherwise act on what it named,
+  reformulate, or do it in this session.
 
 ## Guard rails
 
@@ -237,9 +241,11 @@ refusal on your own judgement.
 `AppData/Roaming` or `AppData/Local/Microsoft`, or set to the home directory itself, is refused
 outright. `--force` does not lift that one. A `--prompt-file` under one of those same directories
 is refused the same way, by `check_prompt_file_allowed`. Setting `AGY_ALLOWED_ROOTS`
-(semicolon-separated) narrows it further to just those roots.
+(semicolon-separated) narrows it further to just those roots. `AGY_BIN` (absolute path to agy.exe)
+pins the binary; a value that is not a file stops the call instead of falling back to another
+build.
 
-Two things the wrapper now prints, and both are worth reading:
+Two things the wrapper prints, and both are worth reading:
 
 - **before the call**, the gitignored paths in each working directory. Those are outside the safety
   net - agy can change them and `git checkout .` will not bring them back;
@@ -249,5 +255,5 @@ Two things the wrapper now prints, and both are worth reading:
   in the brief avoids the case that was reproduced.
 
 Never read, print, or copy `~/.gemini/oauth_creds.json`. It is the live Google session; handling it
-is how accounts get banned. Deny rules in agy's settings now cover that file and its neighbours,
+is how accounts get banned. Deny rules in agy's settings cover that file and its neighbours,
 and they were tested - but they are a fence around agy, not permission for you.

@@ -171,8 +171,8 @@ answer as the first line, do what does not depend on it, and stop - do not subst
 1. **Commit first.** The wrapper refuses on a dirty tree, and that refusal is what makes the whole
    delegation revertible with `git checkout .`. In active development the tree is rarely clean, so
    a checkpoint commit is the standing cost of working this way - not something to route around
-   with `--force`. Generated files dirty the tree too; `__pycache__/` is already gitignored here,
-   and note that gitignoring something also puts it outside the guard.
+   with `--force`. Generated files (`__pycache__`, build output) dirty the tree too: gitignore them,
+   and note that doing so also puts them outside the guard.
 2. **Put the acceptance criteria in the brief** - the exact command that must pass, the public
    names that must keep working, what must not change - and say that you will run it and the
    worker should not.
@@ -198,7 +198,9 @@ Raise `--timeout-min` above the default 10 for multi-file work.
 ## Failure modes
 
 Non-zero exit always means read the reason before acting: change the brief, change a flag, or do
-the work in this session - a retry of the identical call reproduces the identical failure.
+the work in this session - a retry of the identical call usually reproduces the identical failure.
+The exception is an account, eligibility, quota, auth or region error: report it at once, and
+retry once to tell transient from blocked.
 
 | What you see | What it means |
 |---|---|
@@ -223,6 +225,10 @@ refusal on your own judgement.
 outright. `--force` does not lift that one, because the permission entry approves the program and
 constrains no argument - this check is the floor under that. `GLM_ALLOWED_ROOTS`
 (semicolon-separated) narrows it further.
+
+`GLM_CLAUDE_BIN` (absolute path to a `claude.exe`) makes the wrapper use that executable instead
+of resolving the npm shim or falling back to the desktop app's copy; a value that is not a file is
+ignored with a warning. Set it only when the resolution picks the wrong binary.
 
 Two things the wrapper prints, both worth reading: **before** the call, the gitignored paths in
 each working directory, which are outside the safety net; **after** it, exactly which paths

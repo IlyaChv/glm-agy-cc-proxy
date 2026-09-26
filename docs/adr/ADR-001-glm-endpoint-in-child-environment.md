@@ -89,7 +89,8 @@ no longer mutually exclusive.
 
 ## Rules this creates for agents
 
-Reach GLM only through `GLM/glm-run.py`; never set `ANTHROPIC_BASE_URL` or `ANTHROPIC_AUTH_TOKEN`
+Reach GLM only through `glm-run.py` (installed copy `~/.claude/bin/glm-run.py`, source
+`GLM/glm-run.py`); never set `ANTHROPIC_BASE_URL` or `ANTHROPIC_AUTH_TOKEN`
 for a session in order to run a delegated call — a global file read once at startup cannot express
 a per-call decision, and gets the desktop app's sessions as collateral.
 

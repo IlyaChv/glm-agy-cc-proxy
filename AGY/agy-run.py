@@ -3,7 +3,7 @@
 
 Claude Code stays the orchestrator on the Anthropic subscription; this hands one
 brief to agy, which runs on the Google AI Pro quota, and returns its answer plus
-the price of the call.
+its token usage.
 
 Why a wrapper instead of calling `agy -p` directly:
   - pins --output-format json and --print-timeout, so a hung call fails fast
@@ -14,12 +14,12 @@ Why a wrapper instead of calling `agy -p` directly:
     while the call runs; --prompt-file does not change that - its content is
     still passed in argv unless it exceeds the ceiling - so nothing secret
     goes in a brief;
-  - reports usage, so the caller can see a call cost ~17k tokens read / ~44k
-    write and stop before burning the quota blind;
+  - reports usage, so the caller can see a call cost ~17k input tokens as the
+    floor, ~44k input to create one file and stop before burning the quota blind;
   - exits non-zero when agy reports failure OR returns an empty answer, which is
     what an auto-denied tool call looks like: status SUCCESS, response "";
-  - refuses to run on a dirty or non-git tree, which is the only thing standing
-    between --dangerously-skip-permissions and unrecoverable edits (--force skips
+  - refuses to run on a dirty or non-git tree, which is the only undo for
+    edits, since accept-edits and --allow-shell both write without asking (--force skips
     this check while leaving tools on). The guarantee covers the git-tracked
     files inside --dir and --add-dir only: nothing confines agy's file tools to
     those directories, so edits outside them are neither checked nor revertible.
@@ -48,8 +48,10 @@ passes that line through, reads the permission name out of it, and turns the
 empty answer into a non-zero exit that says what to change.
 
 --no-tools is not a read-only switch: agy's permissions.allow still applies. The
-clean-tree guard runs whenever agy could write, covers --add-dir as well as
---dir, and --force skips it.
+clean-tree guard runs when the wrapper grants writes (--allow-shell, or
+accept-edits mode), covers --add-dir as well as --dir, and --force skips it.
+--no-tools without --mode skips the guard too, even though agy's
+permissions.allow may still let it write.
 """
 
 import argparse
@@ -82,10 +84,14 @@ DENIED_RE = re.compile(r'required the "([A-Za-z_][A-Za-z0-9_]*)" permission')
 
 # What each denial actually means here, established by testing on 2026-09-13.
 DENIAL_ADVICE = {
-    "command": "The task needs a shell, and agy's command() grants are ignored in "
-               "headless mode - re-run with --allow-shell.",
-    "write_file": "The target is outside the workspace. Pass its directory as "
-                  "--add-dir (it must be a clean git repo too), or point --dir at it.",
+    "command": "agy tried a terminal command, which headless mode denies. If a "
+               "file tool would do, re-brief with 'use your file-writing tool, not a "
+               "terminal command'. Re-run with --allow-shell only if the task "
+               "genuinely needs a shell (command() grants are ignored in headless mode).",
+    "write_file": "The target is outside the workspace. Have agy write inside --dir "
+                  "(the side directory); add another directory with --add-dir only if "
+                  "it is a clean git repo prepared for this call, never the project's "
+                  "working tree.",
     "read_file": "A read grant is missing, or a deny rule blocked the path. Only "
                  "read_file(*) matches in permissions.allow; deny outranks it.",
     "escalate_admin": "A terminal command tried to leave the sandbox. Re-run with "
@@ -251,7 +257,7 @@ def check_dir_allowed(work_dir):
         sys.exit(
             "agy-run: refused, --dir is inside {}, which holds credentials or "
             "agent configuration.\n         No delegated task needs to work "
-            "there. If you truly meant it, move the files out first.".format(rel)
+            "there. Point --dir at a project directory instead.".format(rel)
         )
 
     # Optional per-machine narrowing, off unless the caller sets it. Semicolon
@@ -289,7 +295,7 @@ def warn_about_ignored(work_dir):
 
 
 def check_clean_tree(work_dir):
-    """Tools auto-approve every call, so require a clean git tree first.
+    """Edits are auto-approved, so require a clean git tree first.
 
     A clean tree turns any result agy produces into `git checkout .`; without one
     there is nothing to undo a bad edit with. Note that `git status --porcelain`
@@ -299,9 +305,11 @@ def check_clean_tree(work_dir):
     probe = git(["rev-parse", "--is-inside-work-tree"], work_dir)
     if probe.returncode != 0 or probe.stdout.strip() != "true":
         sys.exit(
-            "agy-run: refused, {} is not a git repository. agy runs with tools\n"
+            "agy-run: refused, {} is not a git repository. agy runs with edits\n"
             "         auto-approved and can edit files there with nothing to revert.\n"
-            "         Run `git init`, or pass --no-tools, or --force.".format(work_dir)
+            "         Run the call in a git repository with a clean tree, or pass\n"
+            "         --no-tools if the task needs no files. --force skips this check and\n"
+            "         is for an explicit request from the human only.".format(work_dir)
         )
     status = git(["status", "--porcelain"], work_dir)
     if status.returncode != 0:
@@ -477,14 +485,17 @@ def main():
         "--no-tools",
         action="store_true",
         help="pure-reasoning prompt: no sandbox, no accept-edits, no skip-permissions. "
-        "agy's own permissions.allow still applies, so this is not a read-only switch.",
+        "agy's own permissions.allow still applies, so this is not a read-only switch. "
+        "Also skips the clean-tree check and the change report, although agy may still "
+        "write.",
     )
     ap.add_argument(
         "--force", action="store_true",
         help="skip the clean-tree check. Does not skip the forbidden-directory check. "
         "The guard's scope: it covers git-tracked files inside --dir and --add-dir "
         "only - gitignored files and everything outside those directories are "
-        "neither checked nor revertible",
+        "neither checked nor revertible. It also suppresses the gitignored-paths note "
+        "and the after-run change report, so check `git status` yourself.",
     )
     ap.add_argument("--timeout-min", type=int, default=5, help="default: 5")
     ap.add_argument(
@@ -528,8 +539,8 @@ def main():
     if args.no_tools:
         blanket, mode, sandbox = False, args.mode, False
     elif args.allow_shell:
-        # Exactly the old behaviour, and nothing more: --sandbox is left off so
-        # this flag means one known thing rather than an untested combination.
+        # The one combination measured on 2026-09-13; --sandbox is left off so
+        # this flag means one tested configuration rather than an untested one.
         blanket, mode, sandbox = True, args.mode, False
     else:
         blanket, mode, sandbox = False, args.mode or "accept-edits", not args.no_sandbox
@@ -584,14 +595,16 @@ def main():
             ref_real == d or ref_real.startswith(d + os.sep) for d in workspace_dirs
         ):
             sys.stderr.write(
-                "agy-run: warning: the brief file {} is outside the workspace; "
-                "under --sandbox agy may be denied reading it and return an "
-                "empty answer. Move it under --dir or pass --add-dir.\n".format(ref)
+                "agy-run: warning: the brief file {} is outside the workspace. Reads "
+                "outside it have worked in measurement (see the agy skill), but keep "
+                "the brief under --dir or pass --add-dir so the call does not depend "
+                "on that.\n".format(ref)
             )
         brief_ref = ref
         prompt = (
-            "Read the file {} with your file-reading tool and follow the instructions in it. "
-            "Do not list the directory, do not search, and do not run any terminal command. "
+            "Read the file {} with your file-reading tool; the path is absolute, so no "
+            "directory listing, search or terminal command is needed to find it. "
+            "Then follow the instructions in it. "
             "If you cannot read it, reply with exactly: CANNOT READ BRIEF and nothing else."
         ).format(ref)
         cmd = build_cmd(exe, prompt, args, mode, sandbox, blanket)
@@ -621,7 +634,8 @@ def main():
         sys.exit(
             "agy-run: agy did not return within {}s. Known issue: a tool call can "
             "hang in headless mode (antigravity-cli#548). Do not retry the same "
-            "call; narrow it to read-only, or do it yourself.".format(hard_limit)
+            "call unchanged: if the task is large, raise --timeout-min deliberately; "
+            "otherwise narrow the brief or report the hang.".format(hard_limit)
         )
 
     echo_stderr(err)
@@ -709,8 +723,10 @@ def main():
         elif wanted:
             hint = "It was denied \"{}\". {}".format(wanted, DENIAL_ADVICE.get(
                 wanted,
-                "Add an allow-rule for it in ~/.gemini/antigravity-cli/settings.json, "
-                "or re-run with --allow-shell.",
+                "The permission is not in agy's allow list. Report its name to the "
+                "human: that list lives in agy's own settings, which the agent does "
+                "not edit. Re-run with --allow-shell only if the task genuinely needs "
+                "a shell.",
             ))
         else:
             hint = (

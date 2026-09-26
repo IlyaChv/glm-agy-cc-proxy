@@ -15,7 +15,7 @@ the cost of the call on stderr, and a clean-tree guard so the worker's edits are
 always revertible. The differences from agy-run are forced by the tool:
 
   - the brief goes in on **stdin**, not in argv. `claude --print` reads stdin when
-    no positional prompt is given (verified 2026-09-14), which removes agy-run's
+    no positional prompt is given (verified 2026-09-15), which removes agy-run's
     32767-char command-line ceiling and its file-reference fallback entirely, and
     keeps the brief out of the process list.
   - the API key is read from `~/.claude/zai_api_key.txt` and passed in the child's
@@ -65,7 +65,7 @@ KEY_FILE = os.path.join(os.path.expanduser("~"), ".claude", "zai_api_key.txt")
 # (docs.z.ai/devpack/tool/claude, manual-configuration section). The "[1m]"
 # suffix is how Z.AI selects the 1M-token context variant, and it only takes
 # effect together with CLAUDE_CODE_AUTO_COMPACT_WINDOW - confirmed by the probe
-# on 2026-09-14, which reported contextWindow 1000000 in modelUsage.
+# on 2026-09-15, which reported contextWindow 1000000 in modelUsage.
 GLM_SONNET = "glm-5.3[1m]"
 GLM_OPUS = "glm-5.3[1m]"
 GLM_HAIKU = "glm-5.3-flash[1m]"
@@ -109,9 +109,10 @@ def find_claude():
 
     shutil.which("claude") returns the npm shim `claude.CMD`, which CreateProcess
     cannot execute without a shell - so the shim is resolved to the .exe it calls
-    rather than used directly. The desktop app's copy is the documented fallback
-    for a machine where the standalone CLI was never installed, or where its
-    postinstall was blocked and bin/claude.exe is still the stub that exits 1.
+    rather than used directly. The desktop app's copy is the fallback for a
+    machine where the standalone CLI was never installed. A blocked postinstall
+    is not caught here: the stub bin/claude.exe is a file, so it is selected and
+    the child fails with no output (see the no-output message in run()).
     """
     override = os.environ.get("GLM_CLAUDE_BIN")
     if override:
@@ -160,10 +161,10 @@ def find_claude():
 
     sys.exit(
         "glm-run: cannot find a claude executable.\n"
-        "         Install the CLI with `npm install -g "
+        "         Tell the human: it needs `npm install -g "
         "--allow-scripts=@anthropic-ai/claude-code @anthropic-ai/claude-code`\n"
-        "         (the postinstall matters: without it bin/claude.exe is a stub),\n"
-        "         or set GLM_CLAUDE_BIN to the full path of one."
+        "         (see GLM/README.md; the postinstall matters: without it bin/claude.exe\n"
+        "         is a stub), or GLM_CLAUDE_BIN set to the full path of a claude.exe."
     )
 
 
@@ -177,9 +178,9 @@ def read_key():
     if not os.path.isfile(KEY_FILE):
         sys.exit(
             "glm-run: no Z.AI key at {}\n"
-            "         Create it, or run GLM/switch-claude.bat and pick menu item 4.\n"
-            "         Refusing to run: without a key the call would fall back to the\n"
-            "         Anthropic subscription, which is the opposite of delegating.".format(
+            "         Ask the human to create it (one token, one line); do not write it\n"
+            "         yourself. Refusing to run: without a key the call would fall back\n"
+            "         to the Anthropic subscription.".format(
                 KEY_FILE
             )
         )
@@ -258,7 +259,7 @@ def check_dir_allowed(work_dir):
             sys.exit(
                 "glm-run: refused, --dir is inside {}, which holds credentials or "
                 "agent configuration.\n         No delegated task needs to work "
-                "there. If you truly meant it, move the files out first.".format(rel)
+                "there. Point --dir at a project directory instead.".format(rel)
             )
 
     # Optional per-machine narrowing, off unless the caller sets it. Semicolon
@@ -307,7 +308,9 @@ def check_clean_tree(work_dir):
         sys.exit(
             "glm-run: refused, {} is not a git repository. The worker runs with\n"
             "         edits auto-approved and can change files there with nothing to\n"
-            "         revert. Run `git init`, or pass --no-tools, or --force.".format(work_dir)
+            "         revert. Run the call in a git repository with a clean tree, or pass\n"
+            "         --no-tools if the task needs no files. --force skips this check and\n"
+            "         is for an explicit request from the human only.".format(work_dir)
         )
     status = git(["status", "--porcelain"], work_dir)
     if status.returncode != 0:
@@ -317,7 +320,8 @@ def check_clean_tree(work_dir):
         preview = "\n".join("         " + line for line in dirty[:10])
         more = "" if len(dirty) <= 10 else "\n         ... and {} more".format(len(dirty) - 10)
         sys.exit(
-            "glm-run: refused, working tree is dirty - commit first so the delegated "
+            "glm-run: refused, working tree is dirty - commit your own changes first "
+            "(report work that is not yours instead of committing it) so the delegated "
             "edits can be reverted (gitignored files are not shown here and are not "
             "reverted either):\n" + preview + more
         )
@@ -433,14 +437,18 @@ def main():
         help="model for the child session. Leave unset to use the GLM default "
         "(the sonnet slot, " + GLM_SONNET + ").",
     )
-    ap.add_argument("--effort", choices=["low", "medium", "high", "xhigh", "max"])
+    ap.add_argument(
+        "--effort", choices=["low", "medium", "high", "xhigh", "max"],
+        help="reasoning effort passed to the child",
+    )
     ap.add_argument("--agent", help="custom agent for the child session")
     ap.add_argument(
         "--allow-shell",
         action="store_true",
         help="pass --dangerously-skip-permissions, letting the worker run shell "
         "commands. This removes every boundary except the clean-tree guard, and "
-        "that guard only covers git-tracked files inside --dir. Use only when the "
+        "that guard only covers git-tracked files inside --dir and each --add-dir. "
+        "Use only when the "
         "task needs a shell, and say so when reporting the result.",
     )
     ap.add_argument(
@@ -451,12 +459,15 @@ def main():
     )
     ap.add_argument(
         "--force", action="store_true",
-        help="skip the clean-tree check. Does not skip the forbidden-directory check",
+        help="skip the clean-tree check. Does not skip the forbidden-directory check. "
+        "It also suppresses the gitignored-paths note and the after-run change report, "
+        "so check `git status` yourself.",
     )
     ap.add_argument("--timeout-min", type=int, default=10, help="default: 10")
     ap.add_argument(
         "--mode", choices=["acceptEdits", "plan", "dontAsk", "manual"],
-        help="permission mode for the child; defaults to acceptEdits",
+        help="permission mode for the child; defaults to acceptEdits; ignored with "
+        "--allow-shell or --no-tools",
     )
     ap.add_argument(
         "--add-dir", action="append",
@@ -626,8 +637,11 @@ def run(cmd, work_dir, prompt, key, args, extra_dirs, guarded):
     raw = (out or "").strip()
     if not raw:
         sys.exit(
-            "glm-run: the worker produced no output at all (exit {}). Check the "
-            "stderr above - an auth failure against {} looks like this.".format(
+            "glm-run: the worker produced no output at all (exit {}). Read the "
+            "stderr above. Two known causes: an auth or quota failure against {} "
+            "(not yet observed - trust the stderr over this line), or a claude.exe "
+            "that is the npm stub left by a blocked postinstall (claude --version "
+            "fails).".format(
                 proc.returncode, BASE_URL
             )
         )
@@ -664,14 +678,18 @@ def run(cmd, work_dir, prompt, key, args, extra_dirs, guarded):
         sys.stderr.write(
             "glm-run: {} tool call(s) were denied rather than prompted for: {}. "
             "Re-run with --allow-shell if the task genuinely needs a shell, or "
-            "narrow the brief.\n".format(len(denials), ", ".join(names[:8]))
+            "narrow the brief. A denied Edit/Write on a path under .claude/ is "
+            "expected: make those edits from the driver, not with --allow-shell.\n".format(
+                len(denials), ", ".join(names[:8])
+            )
         )
 
     spawned = (payload.get("subagent_stats") or {}).get("spawned")
     if spawned:
         sys.stderr.write(
             "glm-run: warning: the worker spawned {} subagent(s) despite the depth "
-            "cap - the cap is not holding, tell the human.\n".format(spawned)
+            "cap - the cap is not holding - report it to the human (driver: first "
+            "line of your report).\n".format(spawned)
         )
 
     result = payload.get("result", "")

@@ -1,5 +1,6 @@
 # Skill files are read by Claude Code straight from the working tree (through the
-# ~/.claude/skills/glm junction), and its frontmatter parser does not accept CRLF:
+# junctions ~/.claude/skills/glm and ~/.claude/skills/agy), and its frontmatter
+# parser does not accept CRLF:
 # with CRLF the skill's description is lost and the H1 is shown instead, which
 # breaks skill triggering. core.autocrlf=true on this machine would check the file
 # out as CRLF, so pin it to LF here. Found 2026-09-15.
