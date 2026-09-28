@@ -10,7 +10,7 @@ Test before sending: show the brief to a colleague with no context on the task. 
 confused, the agent will be too. Say what to do, not only what to avoid; give the reason where a
 rule looks arbitrary. Describe the outcome you need, not a step-by-step thinking procedure — the
 model plans better than a hand-written plan. Do not ask for the reasoning to be written out in the
-reply either: effort sets how much the model thinks, and on Fable 5.1 and Opus 5.5 such a request can be
+reply either: effort sets how much the model thinks, and on Fable 5.1, Opus 5.5 and Sonnet 5.5 such a request can be
 refused as `reasoning_extraction`.
 
 Order matters: long material (specs, logs, contract excerpts) goes at the top, the task and the
