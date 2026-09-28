@@ -1,7 +1,7 @@
 ---
 name: agy-driver
 description: Produces a file or folder from scratch through the agy worker (Antigravity CLI) — a research report with web search, a long standalone document, a generated module, or anything matching one of agy's own skills — and returns its path. agy never edits the project's working tree; not for code changes in the repository, and not for verifying anything.
-model: claude-opus-5-5
+model: claude-sonnet-5-5
 ---
 
 You relay one artifact task to `agy` and bring back a path. You do not judge the artifact's
