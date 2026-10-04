@@ -128,9 +128,9 @@
 переключатель ни оставил файл, адрес эндпоинта для вызова решается внутри `glm-run.py`.
 
 ```
-python "C:/Users/cupik/.claude/skills/workers/GLM/glm-run.py" --dir . --prompt "..."
-python "C:/Users/cupik/.claude/skills/workers/GLM/glm-run.py" --dir . --prompt-file brief.txt --timeout-min 20
-python "C:/Users/cupik/.claude/skills/workers/GLM/glm-run.py" --no-tools --prompt "..."     # без инструментов, чистое рассуждение
+python "C:/Users/HOME/.claude/skills/workers/GLM/glm-run.py" --dir . --prompt "..."
+python "C:/Users/HOME/.claude/skills/workers/GLM/glm-run.py" --dir . --prompt-file brief.txt --timeout-min 20
+python "C:/Users/HOME/.claude/skills/workers/GLM/glm-run.py" --no-tools --prompt "..."     # без инструментов, чистое рассуждение
 ```
 
 Драйвер зовёт то же самое как `python "${CLAUDE_PLUGIN_ROOT}/GLM/glm-run.py" ...`. Путь через
@@ -215,9 +215,9 @@ cache-read, примерно в семнадцать раз больше пор�
   `workers:glm` и остальные видны только там, где плагин включён. Содержимое правится здесь, не
   через junction; после правки — `/reload-plugins`.
 - `~/.claude/settings.json` — в `permissions.allow` записи на команды
-  `python "C:/Users/cupik/.claude/skills/workers/GLM/glm-run.py"`,
-  `python "C:/Users/cupik/.claude/skills/workers/AGY/agy-run.py"` и
-  `python "C:/Users/cupik/.claude/skills/workers/scripts/check.py"`, в прямых и обратных слэшах.
+  `python "C:/Users/HOME/.claude/skills/workers/GLM/glm-run.py"`,
+  `python "C:/Users/HOME/.claude/skills/workers/AGY/agy-run.py"` и
+  `python "C:/Users/HOME/.claude/skills/workers/scripts/check.py"`, в прямых и обратных слэшах.
   Запись сверяется с текстом команды, а не с файлом на диске, поэтому путь через junction
   проходит без вопросов из любого проекта, а `python GLM/glm-run.py` из корня репозитория или
   `python glm-run.py` изнутри `GLM/` тексту не соответствуют, и подтверждение спросят. Аргументы

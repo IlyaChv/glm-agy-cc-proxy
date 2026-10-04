@@ -64,7 +64,7 @@ Outside this repo, and just as much part of the system:
   (`disable` turns it off); the `workers:agy` skill and the `workers:agy-driver` agent exist only where it is on. The
   content is edited here, never through the junction path; run `/reload-plugins` after an edit.
 - `~/.claude/settings.json` — `permissions.allow` entries naming
-  `python "C:/Users/cupik/.claude/skills/workers/AGY/agy-run.py"` (and the same for
+  `python "C:/Users/HOME/.claude/skills/workers/AGY/agy-run.py"` (and the same for
   `GLM/glm-run.py` and `scripts/check.py`), in both slash styles, so the wrapper runs without a
   prompt. An entry is matched against the command text, so a call has to be spelled through that
   path; `python AGY/agy-run.py` from the repo root prompts. It constrains no argument, which is

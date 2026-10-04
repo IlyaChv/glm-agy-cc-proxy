@@ -170,10 +170,10 @@ A brief for an artifact task, at the length it usually needs:
 
 <example>
 Write a report on how <library> handles retries, to
-`C:/Users/cupik/AppData/Local/Temp/agy-E/retries.md`. Use your file-writing tool, not a terminal
+`C:/Users/HOME/AppData/Local/Temp/agy-E/retries.md`. Use your file-writing tool, not a terminal
 command: do not list the directory, do not search, and do not run any shell command.
 
-The material is `C:/Users/cupik/AppData/Local/Temp/agy-E/input/docs.md` and the library's own
+The material is `C:/Users/HOME/AppData/Local/Temp/agy-E/input/docs.md` and the library's own
 documentation on the web. Sections: the default policy, how to change it, what it does on a
 timeout, and what it does not retry.
 

@@ -76,7 +76,7 @@ no longer mutually exclusive.
   the key in the child environment only.
 - **Rollback cost:** small. Delete `GLM/glm-run.py`, the `glm` skill (`skills/glm/`), the
   `glm-driver` agent, and the `permissions.allow` entries in `~/.claude/settings.json` naming
-  `python "C:/Users/cupik/.claude/skills/workers/GLM/glm-run.py"`. Nothing else depends on it,
+  `python "C:/Users/HOME/.claude/skills/workers/GLM/glm-run.py"`. Nothing else depends on it,
   and the switcher continues to work.
   *Amended 2026-09-15:* the entry was `Bash(python GLM/glm-run.py:*)` and the skill was
   project-scoped until that day; both went to an absolute path and a junction so the worker is
