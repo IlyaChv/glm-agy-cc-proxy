@@ -109,4 +109,5 @@ The Definition of done in `AGENTS.md` applies in full. On top of it, for this ta
 
 ## Open questions
 
-<Log blocking questions here and stop. Log non-blocking decisions here and continue.>
+<Log blocking questions here and stop. Non-blocking decisions go where `AGENTS.md`, "Questions"
+says.>

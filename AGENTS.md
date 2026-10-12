@@ -218,8 +218,9 @@ before the first delegation of a session.
   lines. `workers:glm-driver` writes the worker brief, calls GLM, runs this repo's own smoke-test
   command itself (the `Commands` table above), re-briefs on failure up to three calls, commits
   `wip(<scope>)` or reverts, and reports without the diff. `workers:agy-driver` prepares a side
-  directory, calls agy at most twice — one retry after a fixable failure; an account or eligibility
-  error is reported first and stops it without a retry — and returns the artifact's path.
+  directory, calls agy at most twice — one retry after a fixable failure; an account, eligibility,
+  quota, auth or region error is reported first and stops it without a retry — and returns the
+  artifact's path.
 - **Workers** — separate processes, one self-contained job per call, never the model behind this
   session. **GLM** (`glm-run.py`, Z.AI quota) is Claude Code itself in a child process and does
   ordinary execution: an approved plan, a module sweep, a long draft, a mechanical pass — when the

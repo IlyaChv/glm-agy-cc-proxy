@@ -122,8 +122,9 @@ does not affect the result.
 - anything needing the context already loaded in this session (the worker starts blank every call);
 - a change with no mechanical way to check it. Verification is the safety net, and "the diff looks
   right" is not one;
-- **verifying your own work, or GLM's.** Re-verification runs on `claude-opus-5-5` (or the lead's own
-  session), never on whatever produced the thing. Delegation moves the work, never the responsibility for the result.
+- **verifying your own work, or GLM's.** Your own work is checked in this session;
+  GLM's by the driver's run of the check and the lead reading the diff — never by GLM. Delegation
+  moves the work, never the responsibility for the result.
 
 ## Writing the brief
 

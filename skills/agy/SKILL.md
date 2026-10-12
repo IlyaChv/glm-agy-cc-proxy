@@ -235,8 +235,8 @@ limit (`--timeout-min` × 60 + 30 s) is reached, and the wrapper now takes agy d
   `read_file` means a grant is missing or a deny rule blocked it, `escalate_admin` means a command
   tried to leave the sandbox. A timeout means a hung call instead. **Do not retry the same call
   unchanged** — and an account, eligibility, quota, auth or region error is reported at once and
-  stops the task without any retry (the user fixes it by hand); otherwise act on what it named,
-  reformulate, or do it in this session.
+  stops the task without any retry (the user fixes it by hand); otherwise act on what the
+  wrapper's notice named, reformulate, or do it in this session.
 
 ## Guard rails
 
