@@ -202,8 +202,8 @@ limit (`--timeout-min` × 60 + 30 s) is reached, and the wrapper now takes its w
 
 Non-zero exit always means read the reason before acting: change the brief, change a flag, or do
 the work in this session - a retry of the identical call usually reproduces the identical failure.
-The exception is an account, eligibility, quota, auth or region error: report it at once, and
-retry once to tell transient from blocked.
+An account, eligibility, quota, auth or region error is not retried at all: report it at once
+and stop — the user fixes accounts by hand.
 
 | What you see | What it means |
 |---|---|

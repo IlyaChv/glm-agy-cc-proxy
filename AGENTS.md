@@ -218,8 +218,8 @@ before the first delegation of a session.
   lines. `workers:glm-driver` writes the worker brief, calls GLM, runs this repo's own smoke-test
   command itself (the `Commands` table above), re-briefs on failure up to three calls, commits
   `wip(<scope>)` or reverts, and reports without the diff. `workers:agy-driver` prepares a side
-  directory, calls agy at most twice — one retry after a fixable failure, reporting an account or
-  eligibility error first either way — and returns the artifact's path.
+  directory, calls agy at most twice — one retry after a fixable failure; an account or eligibility
+  error is reported first and stops it without a retry — and returns the artifact's path.
 - **Workers** — separate processes, one self-contained job per call, never the model behind this
   session. **GLM** (`glm-run.py`, Z.AI quota) is Claude Code itself in a child process and does
   ordinary execution: an approved plan, a module sweep, a long draft, a mechanical pass — when the
@@ -343,7 +343,8 @@ costs an incident.*
   change;
 - reality contradicts the task (the contract, the data, or the code is not what the brief says);
 - a worker or an external service answers with an account, eligibility, quota, auth or region
-  error — say so in the next message, before doing anything else, even if a retry then passes;
+  error — say so in the next message, before doing anything else, and stop; do not retry — the
+  fix is manual (the account, or the VPN region);
 - you have retried the same failure three times without a new hypothesis.
 
 *Why: the failure mode of an autonomous agent is not stopping — it is continuing plausibly.*

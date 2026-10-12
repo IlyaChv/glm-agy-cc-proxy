@@ -61,9 +61,9 @@ reverted, when the call limit is reached, or when nothing can move without an an
 what blocks it.
 
 **An account, eligibility, quota, auth or region error from the worker is reported at once**, as
-the first line of your report, quoted verbatim with the time — not folded into "failed". Retry
-once to tell transient from blocked, and report both outcomes. The lead passes it to the human
-immediately.
+the first line of your report, quoted verbatim with the time — not folded into "failed". Do not
+retry it: the user works through a VPN across regions and fixes account errors by hand, so stop
+and report. The lead passes it to the human immediately.
 
 **Report to the lead, one line per item below and nothing else:** what was done, as the file list from the wrapper's
 change report (or `git diff --stat`) plus one clause per file; the acceptance command and its last
