@@ -22,7 +22,7 @@ from errors import account_error  # noqa: E402
 ROOT = Path(__file__).resolve().parent.parent
 DATA = Path(os.environ.get("CLAUDE_PLUGIN_DATA") or Path(tempfile.gettempdir()) / "workers-plugin-data")
 FRESH_SECONDS = 3600
-PROMPT = "reply with exactly: ok"
+PROMPT = "Привет! Ты кто?"
 
 
 def probe_dir():
@@ -47,7 +47,7 @@ def probe(name):
         out, rc = (r.stdout or "") + "\n" + (r.stderr or ""), r.returncode
     except subprocess.TimeoutExpired:
         out, rc = "check: no answer within 200 s", 124
-    ok = rc == 0 and "ok" in (r.stdout or "").lower() if rc != 124 else False
+    ok = rc == 0 and bool((r.stdout or "").strip()) if rc != 124 else False
     account = None if ok else account_error(out)
     tail = [line.strip() for line in out.splitlines() if line.strip()]
     detail = account or (tail[-1][:300] if tail else f"exit {rc}")
