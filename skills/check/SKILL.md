@@ -10,7 +10,7 @@ python "${CLAUDE_PLUGIN_ROOT}/scripts/check.py"
 ```
 
 It prints one line per worker — `OK`, `ACCOUNT` (an account, eligibility, quota, auth or region
-error) or `DOWN` (anything else) — with the time taken and the error line. Relay the lines to the
+error) or `DOWN` (anything else) — with the time taken and, for OK, the worker's reply, otherwise the error line. Relay the lines to the
 user as they are. For `ACCOUNT`, say that it is the user's to fix (the account or the VPN region)
 and that the worker is not used until a re-check passes. Each probe costs a few thousand input
 tokens on the worker's own quota and nothing on Anthropic.

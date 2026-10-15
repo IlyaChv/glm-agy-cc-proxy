@@ -51,7 +51,9 @@ def probe(name):
     account = None if ok else account_error(out)
     tail = [line.strip() for line in out.splitlines() if line.strip()]
     detail = account or (tail[-1][:300] if tail else f"exit {rc}")
-    return {"ok": ok, "account": bool(account), "detail": "" if ok else detail,
+    if ok:
+        detail = " ".join(r.stdout.split())[:300]
+    return {"ok": ok, "account": bool(account), "detail": detail,
             "seconds": round(time.time() - start), "at": time.time()}
 
 
@@ -68,6 +70,8 @@ def save_status(status):
 
 
 def main():
+    sys.stdout.reconfigure(encoding="utf-8")
+    sys.stderr.reconfigure(encoding="utf-8")
     session = "--session" in sys.argv
     status = load_status()
     names = [n for n in COMMANDS
