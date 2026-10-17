@@ -65,7 +65,10 @@ edits inside the workspace and **cannot write outside it**. Everything below was
   repository at all, with nothing to revert it - the snapshot covers `--dir` and `--add-dir` only;
 - web: before every call the wrapper adds `read_url(*)` to `permissions.allow` in agy's settings
   (agy rewrites that file itself, hence every call). `search_web(*)` was tried and agy dropped it
-  as unknown. So web research needs no `--allow-shell`;
+  as unknown. So web research needs no `--allow-shell`. Measured 2026-10-17: `read_url_content`
+  fetched pages and RSS feeds, while agy's `search_web` failed with "location not supported" -
+  agy then worked from known URLs (official sites, feeds, APIs). For a task that depends on broad
+  search results, GLM (WebSearch works) is the better pick;
 - reads are **not** confined to the workspace on either path - agy read a file elsewhere on disk.
   Deny rules are what stop it, and they work: a denied path came back `DENIED` while an allowed
   file in the same call came through;
