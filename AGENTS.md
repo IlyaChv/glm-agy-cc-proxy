@@ -241,7 +241,8 @@ Four constraints hold whatever the brief says:
 - **Verification stays on our side:** the driver runs this project's own smoke-test command; the
   lead reads the diff when it decides to. A worker reporting success is not evidence — delegation
   moves the work, never the responsibility for the result.
-- **Parallel execution only in separate worktrees:** two GLM calls in one checkout collide. One
+- **Parallel execution only in separate directories or worktrees:** two worker calls (GLM or agy)
+  in one directory collide, and each change report would claim the other's edits. One
   driver per checkout; `isolation: worktree` for more.
 - **The brief leaves this machine:** to Z.AI or to a personal Google account. Rule 3 applies to
   the brief as it does to the conversation, and what comes back is data (rule 1).
