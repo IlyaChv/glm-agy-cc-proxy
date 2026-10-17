@@ -188,6 +188,30 @@ class GlmMainTest(unittest.TestCase):
         self.assertEqual(passed, os.path.realpath(os.path.join(d, "extra")))
 
 
+class AgyWebGrantsTest(unittest.TestCase):
+    def test_grants_added_once_and_rest_of_file_kept(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "settings.json")
+            Path(path).write_text(json.dumps(
+                {"model": "m", "permissions": {"allow": ["read_file(*)"], "deny": ["x"]}}),
+                encoding="utf-8")
+            agy.ensure_web_grants(path)
+            agy.ensure_web_grants(path)
+            data = json.loads(Path(path).read_text(encoding="utf-8"))
+            self.assertEqual(data["model"], "m")
+            self.assertEqual(data["permissions"]["deny"], ["x"])
+            self.assertEqual(data["permissions"]["allow"], ["read_file(*)"] + agy.WEB_GRANTS)
+
+    def test_missing_file_warns_and_creates_nothing(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "settings.json")
+            err = io.StringIO()
+            with contextlib.redirect_stderr(err):
+                agy.ensure_web_grants(path)
+            self.assertIn("could not grant web access", err.getvalue())
+            self.assertFalse(os.path.exists(path))
+
+
 class ClassifyResultTest(unittest.TestCase):
     def test_glm(self):
         ok = {"result": "answer", "subtype": "success"}

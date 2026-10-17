@@ -1,6 +1,6 @@
 """Code shared by GLM/glm-run.py and AGY/agy-run.py.
 
-Directory and prompt-file guards, the clean-tree check and change report, the child's
+Directory and prompt-file guards, the pre-call snapshot and change report, the child's
 environment scrub, process-tree cleanup, stderr echo, and JSON payload parsing. Every
 function that prints takes `prog` ("glm-run" / "agy-run") so its lines keep the prefix
 scripts/errors.py keys on.
@@ -14,8 +14,14 @@ import sys
 # Exit codes, the same for both wrappers.
 EXIT_OK = 0
 EXIT_FAILED = 1     # the worker failed or reported an error
-EXIT_REFUSED = 2    # refused before any call: bad args, forbidden dir, dirty tree, bad prompt file
+EXIT_REFUSED = 2    # refused before any call: bad args, forbidden dir, bad prompt file
 EXIT_TIMEOUT = 3    # the worker did not return within the wall-clock limit
+
+# Pre-call snapshots (the revert point for any directory), kept for a week.
+SNAPSHOT_ROOT = os.path.join(
+    os.environ.get("LOCALAPPDATA") or os.path.expanduser("~"), "workers", "snapshots")
+SNAPSHOT_KEEP_DAYS = 7
+SNAPSHOT_MAX_FILES = 20000
 
 # Cap on the child's stderr copied into the caller's transcript.
 MAX_STDERR_CHARS = 4000
@@ -194,88 +200,115 @@ def check_dir_allowed(work_dir, prog, roots_var):
             )
 
 
-def warn_about_ignored(work_dir, prog):
-    """Name the gitignored files in --dir, which the clean-tree check cannot see or revert."""
-    res = git(["status", "--porcelain", "--ignored=matching"], work_dir)
-    if res.returncode != 0:
-        return
-    ignored = [line[3:] for line in res.stdout.splitlines() if line.startswith("!! ")]
-    if not ignored:
-        return
-    shown = ", ".join(ignored[:5])
-    more = "" if len(ignored) <= 5 else " and {} more".format(len(ignored) - 5)
-    sys.stderr.write(
-        "{}: note: {} gitignored path(s) in --dir are outside the safety net "
-        "- the worker can change them and `git checkout .` will not bring them "
-        "back: {}{}\n".format(prog, len(ignored), shown, more)
-    )
-
-
-def check_clean_tree(work_dir, prog):
-    """Edits are auto-approved, so require a git repository with a clean tree first."""
-    probe = git(["rev-parse", "--is-inside-work-tree"], work_dir)
-    if probe.returncode != 0 or probe.stdout.strip() != "true":
-        refuse(
-            "{}: refused, {} is not a git repository. The worker runs with\n"
-            "         edits auto-approved and can change files there with nothing to\n"
-            "         revert. Run the call in a git repository with a clean tree, or pass\n"
-            "         --no-tools if the task needs no files. --force skips this check and\n"
-            "         is for an explicit request from the human only.".format(prog, work_dir)
-        )
-    status = git(["status", "--porcelain", "--untracked-files=all"], work_dir)
-    if status.returncode != 0:
-        refuse("{}: refused, `git status` failed:\n{}".format(prog, status.stderr))
-    if status.stdout.strip():
-        dirty = status.stdout.strip().splitlines()
-        preview = "\n".join("         " + line for line in dirty[:10])
-        more = "" if len(dirty) <= 10 else "\n         ... and {} more".format(len(dirty) - 10)
-        refuse(
-            "{}: refused, working tree is dirty - commit your own changes first "
-            "(report work that is not yours instead of committing it) so the delegated "
-            "edits can be reverted (gitignored files are not shown here and are not "
-            "reverted either):\n".format(prog) + preview + more
-        )
-
-
 def head_commit(d):
     """`git rev-parse HEAD` in d, or None (no commits yet, or not a repository)."""
     res = git(["rev-parse", "HEAD"], d)
     return res.stdout.strip() if res.returncode == 0 else None
 
 
-def report_changes(dirs, heads_before, prog):
-    """Say what the worker touched in each dir: changed paths, and commits it made."""
-    for d in dirs:
+def _shadow(snap, work_dir, args):
+    """git on a shadow repository whose work tree is work_dir; the project's own .git is untouched."""
+    return git(["--git-dir=" + snap, "--work-tree=" + work_dir,
+                "-c", "core.autocrlf=false", "-c", "core.safecrlf=false",
+                "-c", "user.name=workers", "-c", "user.email=workers@localhost"] + args, work_dir)
+
+
+def _count_files(work_dir, limit):
+    """Files under work_dir outside .git, counted up to limit + 1."""
+    n = 0
+    for _root, dirs, files in os.walk(work_dir):
+        dirs[:] = [d for d in dirs if d != ".git"]
+        n += len(files)
+        if n > limit:
+            break
+    return n
+
+
+def _prune_snapshots(keep_days=SNAPSHOT_KEEP_DAYS):
+    """Delete snapshots older than keep_days; a failure here never blocks a call."""
+    import shutil
+    import time
+    cutoff = time.time() - keep_days * 86400
+    try:
+        for name in os.listdir(SNAPSHOT_ROOT):
+            path = os.path.join(SNAPSHOT_ROOT, name)
+            if os.path.isdir(path) and os.path.getmtime(path) < cutoff:
+                shutil.rmtree(path, ignore_errors=True)
+    except OSError:
+        pass
+
+
+def take_snapshots(dirs, prog):
+    """Snapshot each dir into a shadow git repository; {dir: snapshot path or None}.
+
+    This is the safety net for any directory - a git repository with uncommitted work, or no
+    repository at all: whatever the worker changes can be listed and reverted afterwards
+    without touching the project's own history. Files the dir's .gitignore excludes are not
+    in the snapshot. A tree over SNAPSHOT_MAX_FILES, or a failed snapshot, runs without a net
+    and says so.
+    """
+    import time
+    _prune_snapshots()
+    try:
+        os.makedirs(SNAPSHOT_ROOT, exist_ok=True)
+    except OSError:
+        pass
+    stamp = time.strftime("%Y%m%d-%H%M%S")
+    snaps = {}
+    for i, d in enumerate(dirs):
+        if _count_files(d, SNAPSHOT_MAX_FILES) > SNAPSHOT_MAX_FILES:
+            sys.stderr.write(
+                "{}: warning: {} holds over {} files, too many to snapshot; the worker runs "
+                "without a revert point there.\n".format(prog, d, SNAPSHOT_MAX_FILES))
+            snaps[d] = None
+            continue
+        snap = os.path.join(SNAPSHOT_ROOT, "{}-{}-{}".format(stamp, os.getpid(), i))
+        steps = (["init", "-q"], ["add", "-A"],
+                 ["commit", "-q", "--allow-empty", "--no-verify", "-m", "before " + prog])
+        for step in steps:
+            res = _shadow(snap, d, step)
+            if res.returncode != 0:
+                first = (res.stderr or "").strip().splitlines()
+                sys.stderr.write(
+                    "{}: warning: snapshot of {} failed ({}); the worker runs without a "
+                    "revert point there.\n".format(prog, d, first[0] if first else step[0]))
+                snap = None
+                break
+        snaps[d] = snap
+    return snaps
+
+
+def report_changes(snaps, heads_before, prog):
+    """Say what the worker touched in each dir against its snapshot, and how to undo it."""
+    for d, snap in snaps.items():
         before = heads_before.get(d)
         after_head = head_commit(d)
         if after_head != before:
             sys.stderr.write(
-                "{}: HEAD moved in {} from {} to {} - the worker committed, so a clean "
-                "status below does not mean nothing changed; `git log --stat` there shows "
-                "what it did.\n".format(prog, d, before or "(none)", after_head or "(none)")
-            )
-        after = git(["status", "--porcelain", "--untracked-files=all"], d)
-        if after.returncode != 0:
-            first_line = (after.stderr or "").splitlines()[0] if after.stderr else ""
-            sys.stderr.write(
-                "{}: warning: change report unavailable for {} (git status "
-                "failed: {})\n".format(prog, d, first_line)
-            )
+                "{}: HEAD moved in {} from {} to {} - the worker committed; `git log --stat` "
+                "there shows what it did.\n".format(
+                    prog, d, before or "(none)", after_head or "(none)"))
+        if snap is None:
             continue
-        touched = [line for line in after.stdout.splitlines() if line.strip()]
+        _shadow(snap, d, ["add", "-A"])
+        diff = _shadow(snap, d, ["diff", "--cached", "--name-status", "HEAD"])
+        if diff.returncode != 0:
+            first = (diff.stderr or "").strip().splitlines()
+            sys.stderr.write("{}: warning: change report unavailable for {} ({})\n".format(
+                prog, d, first[0] if first else "git diff failed"))
+            continue
+        touched = [line for line in diff.stdout.splitlines() if line.strip()]
         if not touched:
+            sys.stderr.write("{}: no files changed in {}\n".format(prog, d))
             continue
-        top = git(["rev-parse", "--show-toplevel"], d)
-        root = os.path.normpath(top.stdout.strip()) if top.returncode == 0 else d
         shown = "\n".join("         " + t for t in touched[:15])
         more = "" if len(touched) <= 15 else "\n         ... and {} more".format(
-            len(touched) - 15
-        )
+            len(touched) - 15)
+        base = 'git --git-dir="{}" --work-tree="{}"'.format(snap, d)
         sys.stderr.write(
-            "{}: {} path(s) changed in {} - if this is not what you wanted, revert with "
-            "`git checkout . && git clean -fd` run at the repository root ({}):\n{}{}\n".format(
-                prog, len(touched), d, root, shown, more)
-        )
+            "{}: {} path(s) changed in {} - to undo exactly the worker's changes, run:\n"
+            "         {} reset -q --hard HEAD && {} clean -fdq\n{}{}\n".format(
+                prog, len(touched), d, base, base, shown, more))
 
 
 def kill_tree(proc, prog):

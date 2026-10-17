@@ -3,15 +3,16 @@
 
 The brief goes to agy as one argv element (`-p=`), the answer comes out on stdout, token usage
 on stderr. The default is `--mode accept-edits --sandbox` with permissions enforced, behind a
-clean-tree guard. Measurements and the guard's limits: skills/agy/SKILL.md, AGY/README.md.
+pre-call snapshot that makes any change revertible. Measurements and the guard's limits: skills/agy/SKILL.md, AGY/README.md.
 
-    python agy-run.py --dir <clean git repo> --prompt "<brief>"    (or --prompt-file <path>)
+    python agy-run.py --dir <any project dir> --prompt "<brief>"    (or --prompt-file <path>)
 
 Exit codes: 0 success, 1 agy failed or reported an error, 2 refused before any call,
 3 timeout.
 """
 
 import argparse
+import json
 import os
 import re
 import shutil
@@ -31,7 +32,7 @@ DEFAULT_MODEL = "gemini-3.8-flash-high"
 
 EXIT_CODES = (
     "exit codes: 0 success; 1 agy failed or reported an error; 2 refused before any call "
-    "(bad arguments, forbidden directory, dirty tree, bad prompt file, missing binary, "
+    "(bad arguments, forbidden directory, bad prompt file, missing binary, "
     "command line too long); 3 timeout"
 )
 
@@ -46,12 +47,13 @@ DENIAL_ADVICE = {
                "file tool would do, re-brief with 'use your file-writing tool, not a "
                "terminal command'. Re-run with --allow-shell only if the task "
                "genuinely needs a shell (command() grants are ignored in headless mode).",
-    "write_file": "The target is outside the workspace. Have agy write inside --dir "
-                  "(the side directory); add another directory with --add-dir only if "
-                  "it is a clean git repo prepared for this call, never the project's "
-                  "working tree.",
+    "write_file": "The target is outside the workspace. Have agy write inside --dir, "
+                  "or pass the target's directory with --add-dir.",
     "read_file": "A read grant is missing, or a deny rule blocked the path. Only "
                  "read_file(*) matches in permissions.allow; deny outranks it.",
+    "read_url": "Web access was denied: read_url(*) is missing from agy's permissions.allow. "
+                "The wrapper adds it before every call; a warning above says why it could "
+                "not.",
     "escalate_admin": "A terminal command tried to leave the sandbox. Re-run with "
                       "--allow-shell, or with --no-sandbox if the command is safe.",
 }
@@ -67,6 +69,39 @@ def denied_permission(stderr_text):
         return None
     found = DENIED_RE.search(stderr_text)
     return found.group(1) if found else None
+
+
+SETTINGS_FILE = os.path.join(
+    os.path.expanduser("~"), ".gemini", "antigravity-cli", "settings.json")
+
+# Read-only web tools, granted in agy's own settings: headless mode cannot prompt, so without
+# them a request that needs the web (research, "current as of today") is auto-denied, and the
+# only other way in is --allow-shell, which lifts every boundary.
+WEB_GRANTS = ["read_url(*)"]
+
+
+def ensure_web_grants(path=SETTINGS_FILE):
+    """Add WEB_GRANTS to agy's permissions.allow before every call; agy rewrites the file itself.
+
+    Only these entries are added; nothing else in the file is read or changed. A missing or
+    unparseable file is left alone with a warning: agy then denies web access as before.
+    """
+    try:
+        with open(path, encoding="utf-8-sig") as fh:
+            data = json.load(fh)
+        allow = data.setdefault("permissions", {}).setdefault("allow", [])
+        missing = [g for g in WEB_GRANTS if g not in allow]
+        if not missing:
+            return
+        allow.extend(missing)
+        tmp = path + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as fh:
+            json.dump(data, fh, indent=2)
+        os.replace(tmp, path)
+    except (OSError, ValueError, AttributeError) as exc:
+        sys.stderr.write(
+            "agy-run: warning: could not grant web access in {} ({}); a request that "
+            "needs the web will be denied.\n".format(path, exc))
 
 
 def find_agy():
@@ -96,14 +131,14 @@ class Policy:
     mode: Optional[str]    # agy --mode, None when not passed
     sandbox: bool          # --sandbox
     can_write: bool        # agy can change files
-    guarded: bool          # run the clean-tree guard and the change report
+    guarded: bool          # snapshot before, change report after
 
 
 def decide_policy(args):
     """What the flags grant agy. Raises ValueError on a contradiction.
 
     --no-tools is a read-only reasoning call: --mode plan with the sandbox on, no
-    accept-edits and no skip-permissions; nothing is written, so the guard is skipped.
+    accept-edits and no skip-permissions; nothing is written, so the snapshot is skipped.
     """
     if args.no_tools:
         if args.allow_shell:
@@ -271,6 +306,7 @@ def report_cost(payload, requested_model):
 def run(cmd, work_dir, extra_dirs, policy, hard_limit, brief_ref, requested_model):
     dirs = [work_dir] + extra_dirs
     heads = {d: common.head_commit(d) for d in dirs} if policy.guarded else {}
+    snaps = common.take_snapshots(dirs, PROG) if policy.guarded else {}
     # Hard wall clock on top of agy's own --print-timeout: a tool call can hang past it
     # (antigravity-cli#548). agy takes the brief from -p=, never from stdin.
     try:
@@ -278,7 +314,7 @@ def run(cmd, work_dir, extra_dirs, policy, hard_limit, brief_ref, requested_mode
             cmd, work_dir, common.scrubbed_env(), hard_limit, PROG)
     except subprocess.TimeoutExpired:
         if policy.guarded:
-            common.report_changes(dirs, heads, PROG)
+            common.report_changes(snaps, heads, PROG)
         common.die(
             "agy-run: agy did not return within {}s. Known issue: a tool call can "
             "hang in headless mode (antigravity-cli#548). Do not retry the same "
@@ -294,7 +330,7 @@ def run(cmd, work_dir, extra_dirs, policy, hard_limit, brief_ref, requested_mode
     outcome = classify_result(payload, raw, returncode, err, brief_ref, policy.blanket)
 
     if policy.guarded:
-        common.report_changes(dirs, heads, PROG)
+        common.report_changes(snaps, heads, PROG)
     if payload is not None:
         report_cost(payload, requested_model)
 
@@ -324,24 +360,23 @@ def main():
         "Needed for any shell work: agy's own command() grants are ignored in headless "
         "mode, in both the plain and the regex: form. It also removes every other "
         "boundary - measured: agy then writes outside --dir with nothing to revert it - "
-        "so the clean-tree guard is all that is left. Use only when the task needs a "
+        "so the pre-call snapshot is all that is left. Use only when the task needs a "
         "shell.",
     )
     ap.add_argument(
         "--no-tools",
         action="store_true",
         help="read-only reasoning call: --mode plan with the sandbox on, no accept-edits, "
-        "no skip-permissions. Nothing is written, so the clean-tree check and the change "
+        "no skip-permissions. Nothing is written, so the snapshot and the change "
         "report are skipped. Refused together with --allow-shell, --mode accept-edits or "
         "--no-sandbox.",
     )
     ap.add_argument(
         "--force", action="store_true",
-        help="skip the clean-tree check. Does not skip the forbidden-directory check. "
-        "The guard's scope: it covers git-tracked files inside --dir and --add-dir "
-        "only - gitignored files and everything outside those directories are "
-        "neither checked nor revertible. It also suppresses the gitignored-paths note "
-        "and the after-run change report, so check `git status` yourself.",
+        help="skip the pre-call snapshot, so nothing can be reverted and no change "
+        "report is printed. Does not skip the forbidden-directory check. Even with the "
+        "snapshot, gitignored files and everything outside --dir and --add-dir are "
+        "not revertible.",
     )
     ap.add_argument("--timeout-min", type=int, default=5, help="default: 5")
     ap.add_argument(
@@ -356,7 +391,7 @@ def main():
     ap.add_argument(
         "--add-dir", action="append",
         help="give agy an additional workspace directory; repeatable. Each one must "
-        "be a clean git repository, same as --dir",
+        "is snapshotted, same as --dir",
     )
     args = ap.parse_args()
 
@@ -374,20 +409,12 @@ def main():
     except ValueError as exc:
         common.refuse("agy-run: {}".format(exc))
 
-    # Unconditional, and before anything else: --force is about a dirty tree,
+    # Unconditional, and before anything else: --force is about the snapshot,
     # not about where agy is allowed to work.
     # agy runs with cwd=work_dir, so a relative --add-dir means work_dir/<it>; resolve once.
     extra_dirs = [os.path.realpath(os.path.join(work_dir, e)) for e in args.add_dir or []]
     for d in [work_dir] + extra_dirs:
         common.check_dir_allowed(d, PROG, "AGY_ALLOWED_ROOTS")
-
-    # Gate the guard on what agy could actually do, not on any single flag; --add-dir hands
-    # agy another writable directory, held to the same standard.
-    if policy.guarded:
-        for d in [work_dir] + extra_dirs:
-            common.check_clean_tree(d, PROG)
-        for d in [work_dir] + extra_dirs:
-            common.warn_about_ignored(d, PROG)
 
     exe = find_agy()
     # A .cmd/.bat shim runs through cmd.exe, which re-parses the brief in argv as shell syntax.
@@ -396,6 +423,7 @@ def main():
             "agy-run: refused, {} is not an .exe. A .cmd or .bat shim would pass the "
             "brief through cmd.exe; set AGY_BIN to the full path of agy.exe.".format(exe)
         )
+    ensure_web_grants()
     cmd, brief_ref = fit_command(exe, prompt, args, policy, work_dir, extra_dirs)
     return run(cmd, work_dir, extra_dirs, policy, args.timeout_min * 60 + 30, brief_ref,
                args.model)

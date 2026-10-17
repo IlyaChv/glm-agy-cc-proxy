@@ -6,7 +6,7 @@ The Z.AI endpoint, key and model names are set only in the child's environment;
 comes out on stdout, the cost of the call on stderr. Design and measurements: GLM/README.md,
 docs/adr/ADR-001, skills/glm/SKILL.md.
 
-    python glm-run.py --dir <clean git repo> --prompt "<brief>"    (or --prompt-file <path>)
+    python glm-run.py --dir <any project dir> --prompt "<brief>"    (or --prompt-file <path>)
 
 Exit codes: 0 success, 1 the worker failed or reported an error, 2 refused before any call,
 3 timeout.
@@ -42,10 +42,11 @@ API_TIMEOUT_MS = "3000000"
 # Claude Code's subagent tool has been called both names across versions. Deny both: an
 # unrecognised name in --disallowed-tools is ignored, a missing one is a worker that fans out.
 SUBAGENT_TOOLS = ["Task", "Agent"]
+WEB_TOOLS = ["WebSearch", "WebFetch"]
 
 EXIT_CODES = (
     "exit codes: 0 success; 1 the worker failed or reported an error; 2 refused before any "
-    "call (bad arguments, forbidden directory, dirty tree, bad prompt file, missing key or "
+    "call (bad arguments, forbidden directory, bad prompt file, missing key or "
     "binary); 3 timeout"
 )
 
@@ -156,7 +157,7 @@ class Policy:
     mode: Optional[str]    # --permission-mode, None when not passed
     no_tools: bool         # --tools ""
     can_write: bool        # the worker can change files
-    guarded: bool          # run the clean-tree guard and the change report
+    guarded: bool          # snapshot before, change report after
 
 
 def decide_policy(args):
@@ -201,6 +202,9 @@ def build_cmd(exe, args, mode, blanket, no_tools, extra_dirs):
         cmd += ["--tools", ""]
     else:
         cmd += ["--disallowed-tools"] + SUBAGENT_TOOLS
+        # Read-only network tools, pre-approved: without this a request that needs the web
+        # (research, "current as of today") is auto-denied, since nobody can answer a prompt.
+        cmd += ["--allowed-tools"] + WEB_TOOLS
 
     if blanket:
         cmd.append("--dangerously-skip-permissions")
@@ -280,8 +284,8 @@ def main():
         "--allow-shell",
         action="store_true",
         help="pass --dangerously-skip-permissions, letting the worker run shell "
-        "commands. This removes every boundary except the clean-tree guard, and "
-        "that guard only covers git-tracked files inside --dir and each --add-dir. "
+        "commands. This removes every boundary except the pre-call snapshot, and "
+        "that snapshot only covers files inside --dir and each --add-dir. "
         "Use only when the "
         "task needs a shell, and say so when reporting the result.",
     )
@@ -289,13 +293,12 @@ def main():
         "--no-tools",
         action="store_true",
         help="pure-reasoning prompt: --tools \"\", so the worker has no tools at all "
-        "and cannot touch the filesystem. Skips the clean-tree check.",
+        "and cannot touch the filesystem. Skips the snapshot.",
     )
     ap.add_argument(
         "--force", action="store_true",
-        help="skip the clean-tree check. Does not skip the forbidden-directory check. "
-        "It also suppresses the gitignored-paths note and the after-run change report, "
-        "so check `git status` yourself.",
+        help="skip the pre-call snapshot, so nothing can be reverted and no change "
+        "report is printed. Does not skip the forbidden-directory check.",
     )
     ap.add_argument("--timeout-min", type=int, default=10, help="default: 10")
     ap.add_argument(
@@ -306,7 +309,7 @@ def main():
     ap.add_argument(
         "--add-dir", action="append",
         help="give the worker an additional workspace directory; repeatable. Each "
-        "one must be a clean git repository, same as --dir",
+        "one is snapshotted, same as --dir",
     )
     args = ap.parse_args()
 
@@ -324,18 +327,12 @@ def main():
     except ValueError as exc:
         common.refuse("glm-run: {}".format(exc))
 
-    # Unconditional, and before anything else: --force is about a dirty tree, not
+    # Unconditional, and before anything else: --force is about the snapshot, not
     # about where the worker is allowed to work.
     # The child runs with cwd=work_dir, so a relative --add-dir means work_dir/<it>; resolve once.
     extra_dirs = [os.path.realpath(os.path.join(work_dir, e)) for e in args.add_dir or []]
     for d in [work_dir] + extra_dirs:
         common.check_dir_allowed(d, PROG, "GLM_ALLOWED_ROOTS")
-
-    if policy.guarded:
-        for d in [work_dir] + extra_dirs:
-            common.check_clean_tree(d, PROG)
-        for d in [work_dir] + extra_dirs:
-            common.warn_about_ignored(d, PROG)
 
     key = read_key()
     cmd = build_cmd(find_claude(), args, policy.mode, policy.blanket, policy.no_tools, extra_dirs)
@@ -345,6 +342,7 @@ def main():
 def run(cmd, work_dir, prompt, key, extra_dirs, policy, hard_limit):
     dirs = [work_dir] + extra_dirs
     heads = {d: common.head_commit(d) for d in dirs} if policy.guarded else {}
+    snaps = common.take_snapshots(dirs, PROG) if policy.guarded else {}
     # The brief goes in on stdin: no command-line ceiling, no argv quoting, not in the
     # process list.
     try:
@@ -352,7 +350,7 @@ def run(cmd, work_dir, prompt, key, extra_dirs, policy, hard_limit):
             cmd, work_dir, child_env(key), hard_limit, PROG, input_text=prompt)
     except subprocess.TimeoutExpired:
         if policy.guarded:
-            common.report_changes(dirs, heads, PROG)
+            common.report_changes(snaps, heads, PROG)
         common.die(
             "glm-run: the worker did not return within {}s. Its own request timeout "
             "is {}ms, so a wall-clock overrun here usually means a stuck tool call "
@@ -368,7 +366,7 @@ def run(cmd, work_dir, prompt, key, extra_dirs, policy, hard_limit):
     outcome = classify_result(payload, raw, returncode)
 
     if policy.guarded:
-        common.report_changes(dirs, heads, PROG)
+        common.report_changes(snaps, heads, PROG)
 
     if payload is not None:
         report_cost(payload, returncode)
