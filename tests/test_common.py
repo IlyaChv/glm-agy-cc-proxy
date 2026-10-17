@@ -1,4 +1,4 @@
-"""lib/workers_common.py: payload parsing, directory guard, clean-tree guard, change report."""
+"""lib/workers_common.py: payload parsing, directory guard, pre-call snapshot, change report."""
 
 import contextlib
 import io
@@ -77,43 +77,71 @@ class CheckDirAllowedTest(unittest.TestCase):
                         common.check_dir_allowed(path, "test-run", ROOTS_VAR)
 
 
-class CleanTreeTest(unittest.TestCase):
-    def assertRefused(self, d):
-        with contextlib.redirect_stderr(io.StringIO()), \
-                self.assertRaises(SystemExit) as cm:
-            common.check_clean_tree(d, "test-run")
-        self.assertEqual(cm.exception.code, common.EXIT_REFUSED)
+class SnapshotTest(unittest.TestCase):
+    def setUp(self):
+        self.snap_root = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
+        patcher = mock.patch.object(common, "SNAPSHOT_ROOT", self.snap_root.name)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        self.addCleanup(self.snap_root.cleanup)
 
-    def test_clean_passes_untracked_refuses_even_when_hidden(self):
-        repo = temp_repo()
-        with repo:
-            common.check_clean_tree(repo.name, "test-run")
-            os.mkdir(os.path.join(repo.name, "new"))
-            Path(repo.name, "new", "file.txt").write_text("x", encoding="utf-8")
-            self.assertRefused(repo.name)
-            sh_git(repo.name, "config", "status.showUntrackedFiles", "no")
-            self.assertRefused(repo.name)
+    def snapshot_and_report(self, d, heads, change):
+        with contextlib.redirect_stderr(io.StringIO()):
+            snaps = common.take_snapshots([d], "test-run")
+        self.assertIsNotNone(snaps[d])
+        change()
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            common.report_changes(snaps, heads, "test-run")
+        return snaps[d], err.getvalue()
 
-    def test_non_repo_refused(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            self.assertRefused(tmp)
+    def revert(self, snap, d):
+        base = ["--git-dir=" + snap, "--work-tree=" + d]
+        sh_git(d, *base, "reset", "-q", "--hard", "HEAD")
+        sh_git(d, *base, "clean", "-fdq")
 
-    def test_report_changes_names_commits_and_untracked(self):
-        repo = temp_repo()
-        with repo:
-            heads = {repo.name: common.head_commit(repo.name)}
-            Path(repo.name, "committed.txt").write_text("x", encoding="utf-8")
-            sh_git(repo.name, "add", "committed.txt")
-            sh_git(repo.name, "commit", "-q", "-m", "by the worker")
-            os.mkdir(os.path.join(repo.name, "made"))
-            Path(repo.name, "made", "new.txt").write_text("x", encoding="utf-8")
-            err = io.StringIO()
-            with contextlib.redirect_stderr(err):
-                common.report_changes([repo.name], heads, "test-run")
-            text = err.getvalue()
-            self.assertIn("HEAD moved", text)
+    def test_non_repo_dir_is_snapshotted_reported_and_reverted(self):
+        with tempfile.TemporaryDirectory() as d:
+            Path(d, "keep.txt").write_text("original", encoding="utf-8")
+
+            def change():
+                Path(d, "keep.txt").write_text("edited", encoding="utf-8")
+                os.mkdir(os.path.join(d, "made"))
+                Path(d, "made", "new.txt").write_text("x", encoding="utf-8")
+
+            snap, text = self.snapshot_and_report(d, {}, change)
+            self.assertIn("keep.txt", text)
             self.assertIn("made/new.txt", text)
-            self.assertIn("git checkout . && git clean -fd", text)
+            self.assertIn("reset -q --hard HEAD", text)
+            self.revert(snap, d)
+            self.assertEqual(Path(d, "keep.txt").read_text(encoding="utf-8"), "original")
+            self.assertFalse(Path(d, "made").exists())
+
+    def test_dirty_repo_keeps_its_own_changes_on_revert(self):
+        repo = temp_repo()
+        with repo:
+            d = repo.name
+            Path(d, "mine.txt").write_text("uncommitted work", encoding="utf-8")
+            heads = {d: common.head_commit(d)}
+
+            def change():
+                Path(d, "committed.txt").write_text("x", encoding="utf-8")
+                sh_git(d, "add", "committed.txt")
+                sh_git(d, "commit", "-q", "-m", "by the worker")
+
+            snap, text = self.snapshot_and_report(d, heads, change)
+            self.assertIn("HEAD moved", text)
+            self.assertIn("committed.txt", text)
+            self.assertNotIn("mine.txt", text)
+            self.revert(snap, d)
+            self.assertEqual(Path(d, "mine.txt").read_text(encoding="utf-8"), "uncommitted work")
+            self.assertFalse(Path(d, "committed.txt").exists())
+
+    def test_no_change_says_so(self):
+        with tempfile.TemporaryDirectory() as d:
+            Path(d, "a.txt").write_text("x", encoding="utf-8")
+            _snap, text = self.snapshot_and_report(d, {}, lambda: None)
+            self.assertIn("no files changed", text)
 
 
 if __name__ == "__main__":
