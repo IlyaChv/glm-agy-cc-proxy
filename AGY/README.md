@@ -1,28 +1,43 @@
 # AGY — the agy wrapper
 
 `AGY/agy-run.py` is the wrapper that delegates one self-contained task to the Antigravity CLI
-(`agy`) on the Google AI Pro quota. It is part of the Claude Code plugin `workers` and runs from
+(`agy`) on the Google AI Pro quota. It takes any request, in any directory, git or not. It is part of the Claude Code plugin `workers` and runs from
 this repository, with no installed copy: the driver calls
 `python "${CLAUDE_PLUGIN_ROOT}/AGY/agy-run.py" ...`, the same contract as `GLM/glm-run.py`. How
 to delegate, what a call costs, and how to write the brief live in the `agy` skill
-(`skills/agy/`). The code both wrappers share (directory and clean-tree guards, change report,
-process cleanup, payload parsing) is in `lib/workers_common.py`; `python -m unittest discover -s
-tests` exercises it without calling agy.
+(`skills/agy/`). The code both wrappers share (directory guard, pre-call snapshot and change
+report, process cleanup, payload parsing) is in `lib/workers_common.py`; `python -m unittest
+discover -s tests` exercises it without calling agy.
+
+Before a call that can write, each `--dir` and `--add-dir` is snapshotted into a shadow git
+repository under `%LOCALAPPDATA%\workers\snapshots` (kept 7 days; a tree over 20,000 files runs
+without one, with a warning; `.gitignore`d files are not in it). Afterwards the wrapper prints the
+changed paths against the snapshot and the command that undoes exactly agy's changes, leaving the
+user's own uncommitted work as it was. No git and no clean tree are required. `--force` skips the
+snapshot.
+
+Web: before every call the wrapper adds `read_url(*)` to `permissions.allow` in agy's settings,
+because agy rewrites that file itself. `search_web(*)` was tried and agy dropped it as unknown.
+Web research therefore needs no `--allow-shell`.
 
 Exit codes: **0** success; **1** agy failed or reported an error; **2** refused before any call
-(bad arguments, forbidden directory, dirty tree, bad or non-UTF-8 prompt file, missing binary,
-command line too long); **3** timeout.
+(bad arguments, forbidden directory, bad or non-UTF-8 prompt file, missing binary, command line
+too long); **3** timeout.
 
 `--no-tools` is a read-only reasoning call: `--mode plan` with `--sandbox`, no accept-edits and no
-`--dangerously-skip-permissions`. Nothing is written, so the clean-tree check and the change report
-are skipped; combining it with `--allow-shell`, `--mode accept-edits` or `--no-sandbox` is refused.
+`--dangerously-skip-permissions`. Nothing is written, so the snapshot and the change report are
+skipped; combining it with `--allow-shell`, `--mode accept-edits` or `--no-sandbox` is refused.
+
+From processes the Claude Code desktop app's agent starts, agy fails Google's eligibility check;
+see `docs/incidents.md`, 2026-10-17, for the workaround.
 
 ## Known limits of the guard
 
-The clean-tree guard is the wrapper's work; the limits below are not closed by it. The first four
-live in agy's own settings, `~/.gemini/antigravity-cli/settings.json`, which this repo neither
-versions nor edits — and which agy rewrites itself, so values written into it do not necessarily
-survive the next run. The fifth (agy's stderr) is the wrapper's own and stays open by choice:
+The snapshot is the wrapper's work; the limits below are not closed by it. The first four live in
+agy's own settings, `~/.gemini/antigravity-cli/settings.json`, which this repo versions nothing of
+and edits only to add `read_url(*)` — and which agy rewrites itself, so values written into it do
+not necessarily survive the next run. The fifth (agy's stderr) is the wrapper's own and stays open
+by choice:
 
 - **`permissions.allow` is inert while `--allow-shell` bypasses it, and too broad to become the control.** While
   a call passes `--dangerously-skip-permissions` (`--allow-shell`), the list is bypassed
@@ -42,10 +57,10 @@ survive the next run. The fifth (agy's stderr) is the wrapper's own and stays op
   rewrites that file on its own, so the fence is only as durable as the rewrite allows. What
   would close it: a deny rule that survives agy's rewrite, or `--sandbox` (which blocks
   sensitive files) on every call.
-- **agy is not confined to `--dir`.** The clean-tree guard only covers git-tracked
-  files inside `--dir` and `--add-dir`; `allowNonWorkspaceAccess: false` cannot be pinned
-  because agy rewrites its own settings file on every run. Accepted: the guard reports what
-  changed rather than preventing agy from reaching outside the workspace.
+- **agy is not confined to `--dir`.** The snapshot only covers files inside `--dir` and
+  `--add-dir` that their `.gitignore` does not exclude; `allowNonWorkspaceAccess: false` cannot be
+  pinned because agy rewrites its own settings file on every run. Accepted: the wrapper reports
+  what changed rather than preventing agy from reaching outside the workspace.
 - **agy's stderr is bounded but not redacted.** `echo_stderr` caps what reaches the
   transcript at 4000 chars, the same as `glm-run.py`, but does not scrub it: a credential
   echoed by a failing tool call inside that window still reaches the transcript.

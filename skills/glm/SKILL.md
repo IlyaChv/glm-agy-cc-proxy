@@ -1,6 +1,6 @@
 ---
 name: glm
-description: Delegate a self-contained task to a GLM worker - Claude Code itself, running as a child process on the Z.AI endpoint - instead of doing it in this session. Use for execution work: a sweep across many files, implementing an approved plan, a mechanical pass, a long draft, or whenever the user asks to offload work to GLM or Z.AI. Loaded by the `workers:glm-driver` subagent, which makes the call; the lead session never calls the wrapper itself. Not for single lookups, single edits, or verifying your own work.
+description: Delegate a self-contained task to a GLM worker - Claude Code itself, running as a child process on the Z.AI endpoint - instead of doing it in this session. Takes any request the user could make to the lead (code changes, web research, documents, a sweep across many files) in any directory, git or not; use it whenever the user asks to offload work to GLM or Z.AI, or when quota favours it. Loaded by the `workers:glm-driver` subagent, which makes the call; the lead session never calls the wrapper itself. Not for single lookups, single edits, or verifying your own work.
 ---
 
 # Delegating to GLM
@@ -15,7 +15,7 @@ This session stays the orchestrator: it writes the brief and reads the result. G
 model behind Claude Code - it is a worker called for one job at a time.
 
 Which work goes to GLM rather than to agy or to a model here: the `workers:workers` skill. Short
-version - GLM unless the job wants agy's own skills.
+version - either worker takes any task; choose by quota and availability.
 
 ## The call
 
@@ -42,17 +42,17 @@ about keeping your own message readable, nothing more.
 | `--model` | leave unset for the GLM default (`glm-5.3[1m]`, the sonnet slot) |
 | `--effort` | `low` / `medium` / `high` / `xhigh` / `max` |
 | `--agent` | a custom agent for the child session |
-| `--allow-shell` | let the worker run terminal commands; removes every boundary but the clean-tree guard |
-| `--no-tools` | pure reasoning: `--tools ""`, no filesystem access at all. Skips the clean-tree check |
-| `--force` | skip the clean-tree check. Does **not** skip the forbidden-directory check |
+| `--allow-shell` | let the worker run terminal commands; removes every boundary but the pre-call snapshot. Not needed for web access |
+| `--no-tools` | pure reasoning: `--tools ""`, no filesystem access at all. Skips the snapshot |
+| `--force` | skip the pre-call snapshot: no revert, no change report. Does **not** skip the forbidden-directory check |
 | `--timeout-min` | default 10 |
 | `--mode` | `acceptEdits` (default) / `plan` / `dontAsk` / `manual` |
-| `--add-dir` | additional workspace directory, repeatable; each must be a clean git repo too |
+| `--add-dir` | additional workspace directory, repeatable; each is snapshotted too |
 
 Result: the answer on stdout, a `glm-run: model=... in=... out=...` line on stderr. Exit codes:
 **0** success; **1** the worker failed or reported an error; **2** refused before any call (bad
-arguments, forbidden directory, dirty tree, bad or non-UTF-8 prompt file, missing key or binary);
-**3** timeout.
+arguments, forbidden directory, bad or non-UTF-8 prompt file, missing key or binary); **3**
+timeout.
 
 ## What the default does, and why
 
@@ -69,6 +69,8 @@ Everything below was measured on 2026-09-15, not taken from documentation:
   denied by name. Asked outright to delegate to a subagent, the worker answered `NO SUBAGENT`;
 - MCP servers, skills and session files are off - `--strict-mcp-config` with no `--mcp-config`,
   `--disable-slash-commands`, `--no-session-persistence`;
+- the web works without a shell: the wrapper pre-approves `WebSearch` and `WebFetch`
+  (`--allowed-tools`). Verified: GLM searched the web and fetched pages;
 - `~/.claude/settings.json` is **not** read by the worker (`--setting-sources project,local`), so
   whichever mode `GLM/switch-claude.ps1` last left that file in cannot change what a call does.
   Proved by controlled A/B: a project-level `env` var arrives with `project` in the source list and
@@ -79,9 +81,9 @@ this repo that is what you want. Pointing `--dir` at an unfamiliar repository me
 repository's settings - treat it the way you would treat running its build.
 
 **`--allow-shell` is the real exception.** It passes `--dangerously-skip-permissions`, which
-removes every boundary except the clean-tree guard - and that guard only covers git-tracked files
-inside `--dir`. Use it only when the task genuinely needs a terminal, and say so to the user when
-you do.
+removes every boundary except the pre-call snapshot - and that only covers files inside `--dir`
+and each `--add-dir`, minus what their `.gitignore` excludes. Use it only when the task genuinely
+needs a terminal (never for web access), and say so to the user when you do.
 
 ## What a call costs
 
@@ -113,6 +115,8 @@ does not affect the result.
 - implementing a plan that is already approved and written down;
 - a mechanical pass: grep sweeps, manifest diffs, classification, extraction;
 - a long draft whose sections need no context from this conversation;
+- web research, a document, or any other request the user could make to the lead, when GLM's quota
+  is the cheaper one;
 - work that would otherwise fill this context window with files read once;
 - called by a `glm-driver`, not by the lead.
 
@@ -120,8 +124,8 @@ does not affect the result.
 
 - one lookup, one file, one edit - cheaper and faster here;
 - anything needing the context already loaded in this session (the worker starts blank every call);
-- a change with no mechanical way to check it. Verification is the safety net, and "the diff looks
-  right" is not one;
+- a change with no mechanical way to check it and no way to spot-check it against the request.
+  Verification is the safety net, and "the diff looks right" is not one;
 - **verifying your own work, or GLM's.** Your own work is checked in this session;
   GLM's by the driver's run of the check and the lead reading the diff — never by GLM. Delegation
   moves the work, never the responsibility for the result.
@@ -133,7 +137,9 @@ The worker starts with no memory of this conversation, so the brief carries ever
 - absolute paths, not "the file we were just looking at";
 - the outcome wanted, phrased as an instruction ("rewrite", "list", "fix") - ask for suggestions
   and you get suggestions;
-- explicit acceptance criteria, including the exact command that must pass;
+- explicit acceptance criteria, including the exact command that must pass if there is one; the
+  user's request as written is a fine core for the brief, with the context the worker cannot know
+  added around it;
 - long material (logs, specs, excerpts) in a file the brief points to, not pasted inline;
 - the sentence: "If an input named here is missing or unreadable, or a criterion cannot be met, say
   so in your answer as the first line, do what does not depend on it, and stop - do not substitute
@@ -168,19 +174,26 @@ answer as the first line, do what does not depend on it, and stop - do not subst
 
 ## Delegating code work
 
-1. **Commit first.** The wrapper refuses on a dirty tree, and that refusal is what makes the whole
-   delegation revertible with `git checkout .`. In active development the tree is rarely clean, so
-   a checkpoint commit is the standing cost of working this way - not something to route around
-   with `--force`. Generated files (`__pycache__`, build output) dirty the tree too: gitignore them,
-   and note that doing so also puts them outside the guard.
+1. **Nothing to prepare.** No git and no clean tree are needed: before the call the wrapper
+   snapshots each `--dir` and `--add-dir` into a shadow git repository, so the delegation is
+   revertible in any directory and the user's own uncommitted work is not in the way. Do not pass
+   `--force`, which skips the snapshot. Files the directory's `.gitignore` excludes are not in
+   the snapshot.
 2. **Put the acceptance criteria in the brief** - the exact command that must pass, the public
    names that must keep working, what must not change - and say that you will run it and the
-   worker should not.
-3. **Read the change report** the wrapper prints after the run. Nothing listed after a write task
+   worker should not. With no command, say what files must exist and what they must contain.
+3. **Read the change report** the wrapper prints after the run: the changed paths against the
+   snapshot, and a note if HEAD moved (the worker committed). Nothing listed after a write task
    means the work did not happen, whatever the answer says.
-4. **Run the project's own verification yourself.** The worker reporting success is not evidence:
-   it answers from what it wrote, not from what runs.
-5. **Read the diff, then keep or revert.** Commit it, or `git checkout .` and re-brief.
+4. **Verify yourself.** Run the project's own check; with none, check that the produced files
+   exist and are non-empty and spot-check them against the request. The worker reporting success
+   is not evidence: it answers from what it wrote, not from what runs.
+5. **Keep or undo.** Keep: commit `wip(<scope>)` if the directory is a git repository that was
+   clean before the call, otherwise leave the changes in place. Undo: run the command the wrapper
+   printed (`git --git-dir="<snap>" --work-tree="<dir>" reset -q --hard HEAD && ... clean -fdq`),
+   which reverts exactly the worker's changes and leaves the user's own work as it was; then
+   re-brief naming the failure. *Why not `git checkout .`: it would also discard the user's
+   uncommitted work, and it cannot revert a non-git directory.*
 
 Raise `--timeout-min` above the default 10 for multi-file work.
 
@@ -196,8 +209,8 @@ limit (`--timeout-min` × 60 + 30 s) is reached, and the wrapper now takes its w
   (`> answer.md`; the wrapper forces UTF-8 on its own output, so non-ASCII survives the redirect),
   return that file's path in your report, and keep the report to the cost line plus a few sentences.
 - Report the cost line when a call is expensive or when two run in a row.
-- Check `git diff` in `--dir` before believing the summary: the worker may have edited files even
-  on a task phrased as a question.
+- Read the change report before believing the summary: the worker may have edited files even on a
+  task phrased as a question.
 
 ## Failure modes
 
@@ -218,12 +231,14 @@ and stop — the user fixes accounts by hand.
 
 ## Guard rails
 
-The worker edits files on any call where it can write, so the wrapper refuses to run unless
-`--dir` - and every `--add-dir` - is a git repository with a clean working tree. That makes the
-outcome revertible with `git checkout .`.
+The worker edits files on any call where it can write, so before such a call the wrapper
+snapshots `--dir` and every `--add-dir` into a shadow git repository under
+`%LOCALAPPDATA%\workers\snapshots` (kept 7 days). A tree over 20,000 files runs without a
+snapshot and a warning says so. Git is not required and a dirty tree does not matter; the
+snapshot is separate from the project's own history.
 
-`--force` skips that check - only on an explicit request from the user, never to get past the
-refusal on your own judgement.
+`--force` skips the snapshot - only on an explicit request from the user, never on your own
+judgement.
 
 `--dir` inside `.gemini`, `.claude`, `.ssh`, `.aws`, `.gnupg`, `.config`, `.docker`,
 `AppData/Roaming` or `AppData/Local/Microsoft`, or set to the home directory itself, is refused
@@ -236,9 +251,8 @@ of resolving the npm shim or falling back to the desktop app's copy; a value tha
 stops the call (exit 2) instead of falling back. Set it only when the resolution picks the wrong
 binary.
 
-Two things the wrapper prints, both worth reading: **before** the call, the gitignored paths in
-each working directory, which are outside the safety net; **after** it, exactly which paths
-changed.
+What the wrapper prints **after** the call is worth reading: exactly which paths changed against
+the snapshot, the command that undoes them, and a note if HEAD moved.
 
 The Z.AI key lives in `~/.claude/zai_api_key.txt` and reaches the worker through its environment.
 Never pass it as an argument, never print it, never commit it - argv is readable by any process on

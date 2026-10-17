@@ -2,7 +2,7 @@
 
 Read by the agents that work here: Claude Code loads it through the `@AGENTS.md` import in
 `CLAUDE.md`, and the GLM worker, being Claude Code, loads it the same way when its `--dir` is this
-repository. agy works only in side directories and does not see this file.
+repository. agy does not see this file.
 
 Every line here is paid for by every session and dilutes the lines around it, so this file holds
 only what every task needs. Anything that matters to some sessions only lives where those sessions
@@ -76,7 +76,8 @@ rule without a why gets worked around.
 ## Scope
 
 This project holds **the wiring between Claude Code and the workers it delegates to**, packaged
-as the Claude Code plugin `workers`: the `agy-run` and `glm-run` wrappers, the `agy`, `glm`,
+as the Claude Code plugin `workers`: the `agy-run` and `glm-run` wrappers, which take any request
+in any directory, git or not, the `agy`, `glm`,
 `workers` and `check` skills, the two driver agents, the availability and account-error hooks,
 the GLM switcher, the permission entries that let the wrappers run unprompted, and this shared
 contract.
@@ -140,10 +141,10 @@ In this repo:
 - `.claude/rules/` — path-scoped rules, loaded only when a matching file is opened
 - `docs/adr/` — architectural decisions; `ADR-INDEX.md` is the only maintained list of them
 - `docs/templates/` — task brief, ADR, memory entry
-- `lib/workers_common.py` — code both wrappers import (guards, change report, process cleanup,
-  payload parsing, exit codes)
+- `lib/workers_common.py` — code both wrappers import (guards, snapshot and change report, process
+  cleanup, payload parsing, exit codes)
 - `tests/` — `unittest` suite for the wrappers, `lib/` and `scripts/errors.py`
-- `AGY/` — versioned source of the agy wrapper (`agy-run.py`) and its README on the guard's limits
+- `AGY/` — versioned source of the agy wrapper (`agy-run.py`) and its README on the snapshot's limits
 - `GLM/` — `glm-run.py` (GLM worker) and `switch-claude.ps1` (switches Claude Code itself to Z.AI);
   see its README
 
@@ -165,7 +166,7 @@ loads itself when you open a file under one of those paths.
 - **Every call to a worker goes through its wrapper** — `agy-run.py`, never `agy -p`; `glm-run.py`,
   never `claude --print`.
   *Why: a wrapper pins the JSON output format and a timeout, reports what the call cost, and
-  refuses to auto-approve edits on a dirty tree. A raw call loses all four, and a hung one blocks
+  snapshots the directory so the worker's edits can be listed and undone. A raw call loses all four, and a hung one blocks
   the session with nothing to show. `glm-run.py` additionally keeps the Z.AI key out of argv and
   the endpoint out of `settings.json`, neither of which a hand-written call would do.*
 - **The driver loads the worker's skill (`glm` or `agy`) before the call.** Convention, not a
@@ -215,28 +216,28 @@ before the first delegation of a session.
 - **Lead**: design, plans, the brief for a driver, final acceptance. Single lookups, single
   edits, and anything that needs this session's context stay here.
 - **Drivers** — subagents that own one delegated task end to end and return a report of a few
-  lines. `workers:glm-driver` writes the worker brief, calls GLM, runs this repo's own smoke-test
-  command itself (the `Commands` table above), re-briefs on failure up to three calls, commits
-  `wip(<scope>)` or reverts, and reports without the diff. `workers:agy-driver` prepares a side
-  directory, calls agy at most twice — one retry after a fixable failure; an account, eligibility,
-  quota, auth or region error is reported first and stops it without a retry — and returns the
-  artifact's path.
+  lines. The two are symmetric. Each writes the worker brief (the user's request as written plus
+  the context the worker cannot know), calls its wrapper, reads the change report, verifies (this
+  repo's smoke-test command, or that the produced files exist and match the request), commits
+  `wip(<scope>)` if the directory is a git repository that was clean before the call and otherwise
+  leaves the changes, undoes a failed attempt with the command the wrapper printed, and reports
+  without the diff. `workers:glm-driver` makes up to three calls, `workers:agy-driver` two — one
+  retry after a fixable failure; an account, eligibility, quota, auth or region error is reported
+  first and stops it without a retry.
 - **Workers** — separate processes, one self-contained job per call, never the model behind this
-  session. **GLM** (`glm-run.py`, Z.AI quota) is Claude Code itself in a child process and does
-  ordinary execution: an approved plan, a module sweep, a long draft, a mechanical pass — when the
-  task ends in a commit, has a way to verify it (the smoke-test command), and runs in a clean git
-  checkout. **agy** (`agy-run.py`, Google AI Pro quota) produces artifacts from scratch — a
-  research report, a standalone document, a generated module, anything matching its own skills —
-  and **never edits this project's working tree**.
+  session. **GLM** (`glm-run.py`, Z.AI quota) is Claude Code itself in a child process; **agy**
+  (`agy-run.py`, Google AI Pro quota) is Antigravity. Either takes any request the user could make
+  to the lead — web research, code changes in the project, documents — in any directory, git or
+  not. Choose by quota (Anthropic most expensive, then Z.AI, then Google AI Pro, which refills
+  every five hours) and availability, not by task type.
 
-Work that fits none of that — a step inside the lead's current task, a dirty tree that is
-inconvenient to commit mid-way, no git at all — goes to the `implementer`, `sweeper` and `drafter`
-subagents, which take the lead's context in their prompt and need no ceremony.
+Work that needs the lead's current context goes to the `implementer`, `sweeper` and `drafter`
+subagents, which take it in their prompt and need no ceremony.
 
 Four constraints hold whatever the brief says:
 
-- **Commit first, and do not pass `--force`:** both wrappers refuse on a dirty tree, and that
-  refusal is what makes the result revertible. `--force` removes the revert, not the obstacle.
+- **Do not pass `--force`:** it skips the pre-call snapshot, and with it the change report and
+  the revert. Neither wrapper needs git or a clean tree.
 - **Verification stays on our side:** the driver runs this project's own smoke-test command; the
   lead reads the diff when it decides to. A worker reporting success is not evidence — delegation
   moves the work, never the responsibility for the result.
@@ -248,8 +249,9 @@ Four constraints hold whatever the brief says:
 *Why the tiers: a worker's answer and its diff are the largest things a session can read, and the
 lead re-pays them on every turn afterwards. A driver reads them once and hands back a short report.*
 
-The cost figures behind the GLM and agy choice — per-call token floors, the large-multifile-task
-measurements, agy's `--allow-shell` boundary — are in `skills/glm/SKILL.md` and
+Web access needs no `--allow-shell` for either worker. The cost figures behind the GLM and agy
+choice — per-call token floors, the large-multifile-task measurements, agy's `--allow-shell`
+boundary — are in `skills/glm/SKILL.md` and
 `skills/agy/SKILL.md`.
 
 ---
@@ -315,8 +317,8 @@ costs an incident.*
 - Local-only repository, no remote. Commit on `master`; a branch only when a change is speculative
   enough that abandoning it is likely.
 - Commits: `feat(scope): ...`, `fix(scope): ...`. Body = **what / why / how it was verified**.
-- Commit before delegating a write task to GLM — the wrapper refuses on a dirty tree, and that
-  refusal is the safety net, not an obstacle to work around with `--force`.
+- No checkpoint commit is needed before delegating a write task: the wrapper snapshots the
+  directory, and `--force` (which skips the snapshot) is not a way to save time.
 
 ---
 

@@ -65,7 +65,7 @@ no longer mutually exclusive.
   and is a deliberate property, not an oversight.
 - **Accepted cost:** the child does not inherit user-level settings, so the user's hooks and
   permission grants do not apply to the worker. Its safety comes from `glm-run.py`'s own guards —
-  the clean-tree check, the forbidden-directory check, the subagent cap — and not from
+  the pre-call snapshot, the forbidden-directory check, the subagent cap — and not from
   `settings.json`. Anything added to that file later will not fence the worker.
 - **Known exposure:** the **project-level** `.claude/settings.json` *is* read, with its `env` block
   and its hooks. Inside this repo that is wanted; pointing `--dir` at an unfamiliar repository

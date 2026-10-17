@@ -1,6 +1,6 @@
 ---
 name: agy
-description: How the workers:agy-driver subagent delegates one artifact task to the Antigravity CLI (agy) on the Google AI Pro quota. Use when the agy-driver has been handed a task whose deliverable is a file or folder produced from scratch in a side directory - a research report with web search, a long standalone document, a generated module, or work matching one of agy's own skills - and the result comes back as a path. Not for in-session work, not for editing this project's working tree, and not for single lookups or single edits; ordinary execution that ends in a commit goes to the GLM worker instead.
+description: How the workers:agy-driver subagent delegates one task to the Antigravity CLI (agy) on the Google AI Pro quota. Use when the agy-driver has been handed any request the user could make to the lead - web research, code changes in the project, a long document, work matching one of agy's own skills - in any directory, git or not. Not for in-session work and not for single lookups or single edits.
 ---
 
 # Delegating to agy
@@ -10,11 +10,16 @@ as a separate agent with its own tools, context and skills. Claude Code stays th
 it writes the brief, reads the result, and verifies it. `agy` is never the model behind Claude
 Code - it is a worker called for one job at a time.
 
-**agy produces artifacts; it never edits a project's working tree.** Its `--dir` is a side
-directory prepared for the call - a fresh git repository in the session scratchpad with the inputs
-copied in and committed - and what comes back is a path. Bringing the artifact into the project is
-the lead's decision, made as an ordinary edit. The call is made by the `workers:agy-driver`
-subagent, not by the lead session.
+**agy takes any request, exactly as the user would write it to the lead**, and may work directly
+in the project directory, like GLM. Its `--dir` is whatever directory the task is about, git or
+not, clean or not: a pre-call snapshot makes the change revertible. Which worker to use is a
+matter of quota and availability (`workers:workers`). The call is made by the
+`workers:agy-driver` subagent, not by the lead session.
+
+**If a call fails with `Eligibility check failed: ... not currently available in your location`**
+from a process the desktop app's agent started, it is the known incident of 2026-10-17
+(`docs/incidents.md`): report it as an account/region error and stop; the lead reruns the same
+command through the Terminal panel (`run_in_terminal`, output via `read_terminal`).
 
 ## The call
 
@@ -37,16 +42,16 @@ already passed as `--prompt-file`.
 |---|---|
 | `--dir` | working directory for agy; always pass it explicitly |
 | `--prompt` / `--prompt-file` | the brief (mutually exclusive, one is required) |
-| `--model` | default `gemini-3.8-flash-high` (the wrapper's `DEFAULT_MODEL`); `agy models` for the current list |
+| `--model` | default `gemini-3.8-flash-high` (the wrapper's `DEFAULT_MODEL`); `agy models` for the current list, which now includes Claude models such as `claude-opus-5-5-medium` |
 | `--effort` | `low` / `medium` / `high` |
 | `--agent` | one of agy's own agents (`agy agents` lists them), e.g. `Senior Developer` |
-| `--allow-shell` | let agy run terminal commands; needed for any shell work, and it removes every other boundary (see below) |
-| `--no-tools` | read-only reasoning call: `--mode plan` with the sandbox on, no accept-edits, no skip-permissions; skips the clean-tree check because nothing is written. Refused with `--allow-shell`, `--mode accept-edits` or `--no-sandbox` |
-| `--force` | skip the clean-tree check |
+| `--allow-shell` | let agy run terminal commands; needed for any shell work, not for web access, and it removes every other boundary (see below) |
+| `--no-tools` | read-only reasoning call: `--mode plan` with the sandbox on, no accept-edits, no skip-permissions; skips the snapshot because nothing is written. Refused with `--allow-shell`, `--mode accept-edits` or `--no-sandbox` |
+| `--force` | skip the pre-call snapshot: no revert, no change report |
 | `--timeout-min` | default 5 |
 | `--no-sandbox` | do not pass `--sandbox` (it is on by default) |
 | `--mode accept-edits\|plan` | agy's execution mode; defaults to `accept-edits`. `--no-tools` always runs `plan`; with `--allow-shell` no `--mode` is passed unless set explicitly |
-| `--add-dir` | additional workspace directory, repeatable; each must be a clean git repo too |
+| `--add-dir` | additional workspace directory, repeatable; each is snapshotted too |
 
 ## What the default does, and why
 
@@ -57,7 +62,10 @@ edits inside the workspace and **cannot write outside it**. Everything below was
 - default path: created and read files in the workspace, exited 0; a write to a path outside the
   workspace was **refused**;
 - with `--allow-shell`: the same prompt wrote into a directory outside `--dir` that was not a git
-  repository at all, with nothing to revert it;
+  repository at all, with nothing to revert it - the snapshot covers `--dir` and `--add-dir` only;
+- web: before every call the wrapper adds `read_url(*)` to `permissions.allow` in agy's settings
+  (agy rewrites that file itself, hence every call). `search_web(*)` was tried and agy dropped it
+  as unknown. So web research needs no `--allow-shell`;
 - reads are **not** confined to the workspace on either path - agy read a file elsewhere on disk.
   Deny rules are what stop it, and they work: a denied path came back `DENIED` while an allowed
   file in the same call came through;
@@ -70,8 +78,8 @@ edits inside the workspace and **cannot write outside it**. Everything below was
   value on every run. Do not rely on it.
 
 **Use `--allow-shell` only when the task genuinely needs a terminal**, and say so to the user when
-you do - it is the difference between "revertible inside one directory" and "wrote somewhere
-nobody is tracking". If a default-path call comes back empty with a `command` permission named on
+you do, and never for web access - it is the difference between "revertible inside one
+directory" and "wrote somewhere nobody is tracking". If a default-path call comes back empty with a `command` permission named on
 stderr, that is the signal the task needed a shell.
 
 **Write the brief to prefer file tools.** Left to itself agy reaches for the shell even for
@@ -82,8 +90,8 @@ terminal command" is usually the whole fix.
 
 Result: the answer on stdout, one `agy-run: status=... in=... out=...` line on stderr (the model
 is the one agy reports, else the one requested). Exit codes: **0** success; **1** agy failed or
-reported an error; **2** refused before any call (bad arguments, forbidden directory, dirty tree,
-bad or non-UTF-8 prompt file, missing binary, command line too long); **3** timeout.
+reported an error; **2** refused before any call (bad arguments, forbidden directory, bad or
+non-UTF-8 prompt file, missing binary, command line too long); **3** timeout.
 
 **Tools are on by default, and that is not really optional.** Headless mode cannot prompt for a
 permission, so it auto-denies — and an auto-denied tool call comes back as `status=SUCCESS` with an
@@ -118,19 +126,16 @@ question you could answer with one `grep` costs 17k tokens of someone's quota to
 ## When to delegate
 
 - a research report that needs web search, delivered as a file;
-- a long standalone document whose sections can be drafted without this session's context;
-- a module or a fixture set generated from scratch into the side directory, to be reviewed and
-  brought in by the lead;
+- a long document whose sections can be drafted without this session's context;
+- a code change or a generated module, in the project directory or elsewhere;
 - a task that matches one of agy's own skills, which Claude Code does not have;
-- a sweep or audit over a copy of the inputs where only the written conclusion comes back.
+- a sweep or audit where only the written conclusion comes back;
+- any other request the user could make to the lead, when Google AI Pro is the quota to spend.
 
 ## When not to
 
 - one lookup, one file, one edit - cheaper and faster here;
 - anything needing the context already loaded in this session (agy starts blank every call);
-- a code change inside the project's working tree - that is the GLM worker's track (`glm-driver`),
-  or an `implementer` subagent; agy's `--dir` never points at the project, except the `--mode plan`
-  smoke test in `AGENTS.md`;
 - verifying your own work. Delegation moves the work, never the responsibility for the result.
 
 ## Writing the brief
@@ -140,7 +145,8 @@ agy starts with no memory of this conversation. The brief carries everything:
 - absolute paths, not "the file we were just looking at";
 - the outcome wanted, phrased as an instruction ("rewrite", "list", "fix") - ask for suggestions
   and you get suggestions;
-- explicit acceptance criteria;
+- explicit acceptance criteria; the user's request as written is a fine core for the brief, with
+  the context agy cannot know added around it;
 - long material (logs, specs, excerpts) in a file that the brief points to, not pasted inline;
 - the sentence: "If an input named here is missing or unreadable, or a criterion cannot be met, say
   so in your answer as the first line, do what does not depend on it, and stop - do not substitute
@@ -164,9 +170,9 @@ denied, while the same task with the absolute path and that sentence succeeds. T
 prevents the silent no-op in Guard rails.
 
 If `--dir` holds an `AGENTS.md`, agy reads it on its own - project rules do not need repeating. A
-side directory usually holds none, so the sentences above are the only contract agy sees there.
+directory without one leaves the sentences above as the only contract agy sees.
 
-A brief for an artifact task, at the length it usually needs:
+A brief for a research task, at the length it usually needs:
 
 <example>
 Write a report on how <library> handles retries, to
@@ -185,27 +191,30 @@ If an input named here is missing or unreadable, or a criterion cannot be met, s
 answer as the first line, do what does not depend on it, and stop - do not substitute a guess.
 </example>
 
-## Delegating a code artifact (in the side directory)
+## Delegating a write task
 
-The loop, as measured. It runs in the side directory the driver prepared (see "agy never edits a
-project's working tree" above); bringing the result into the project is a separate edit by the
-lead. Each step is here because skipping it has a known failure:
+The loop, as measured. Each step is here because skipping it has a known failure:
 
-1. **Commit the inputs first.** The wrapper refuses on a dirty tree, and that refusal is what makes
-   the call revertible with `git checkout .` in the side directory - not something to route around
-   with `--force`. Generated files (`__pycache__`, build output) dirty the tree too: gitignore them,
-   and note that doing so also puts them outside the guard.
+1. **Nothing to prepare.** No git and no clean tree are needed: before the call the wrapper
+   snapshots each `--dir` and `--add-dir` into a shadow git repository, so the call is revertible
+   in any directory and the user's own uncommitted work is not in the way. Do not pass `--force`.
+   Files the directory's `.gitignore` excludes are not in the snapshot.
 2. **Put the acceptance criteria in the brief** - the exact command that must pass, the public names
    that must keep working, what must not change - and say that you will run it and agy should not.
-   Everything else follows "Writing the brief" above: absolute paths, nothing left to discover, no
-   shell needed.
-3. **Read the change report** the wrapper prints after the run. Nothing listed after a write task
-   means the work did not happen, whatever the answer says.
-4. **Run the verification yourself, in the side directory** - tests, linter, type-checker. agy reporting
-   success is not evidence: it answers from what it wrote, not from what runs. This is the step that
-   turns a delegated diff into a result you can defend.
-5. **Read the diff, then keep or revert.** Commit it in the side directory and return the path, or
-   `git checkout .` and re-brief.
+   With no command, say what files must exist and what they must contain. Everything else follows
+   "Writing the brief" above: absolute paths, nothing left to discover, no shell needed.
+3. **Read the change report** the wrapper prints after the run: the changed paths against the
+   snapshot, and a note if HEAD moved. Nothing listed after a write task means the work did not
+   happen, whatever the answer says.
+4. **Verify yourself** - the project's tests, linter, type-checker; with none, check that the
+   produced files exist and are non-empty and spot-check them against the request. agy reporting
+   success is not evidence: it answers from what it wrote, not from what runs.
+5. **Keep or undo.** Keep: commit `wip(<scope>)` if the directory is a git repository that was
+   clean before the call, otherwise leave the changes in place. Undo: run the command the wrapper
+   printed (`git --git-dir="<snap>" --work-tree="<dir>" reset -q --hard HEAD && ... clean -fdq`),
+   which reverts exactly agy's changes and leaves the user's own work as it was; then re-brief
+   naming the failure. *Why not `git checkout .`: it would also discard the user's uncommitted
+   work, and it cannot revert a non-git directory.*
 
 Raise `--timeout-min` above the default 5 for multi-file work: the measured task took 139 s, and
 that was a small project.
@@ -226,9 +235,8 @@ limit (`--timeout-min` × 60 + 30 s) is reached, and the wrapper now takes agy d
   report to the usage line plus two or three sentences. Read enough of it to verify the
   result - that responsibility never moves - but checking it is not reproducing it. A short answer
   stays inline: a verdict or a list costs less said than sent.
-- Read what agy actually produced before believing the summary. Check `git diff` in `--dir`: it may
-  have edited files even on a task phrased as a question. That is what the clean-tree requirement
-  is for.
+- Read what agy actually produced before believing the summary. Check the change report: it may
+  have edited files even on a task phrased as a question. That is what the snapshot is for.
 - Non-zero exit: read the reason before acting. On an empty answer the wrapper reads the permission
   name out of agy's own notice and says which one was denied and what to change - `command` means
   the task needs `--allow-shell`, `write_file` means the target is outside the workspace,
@@ -240,12 +248,14 @@ limit (`--timeout-min` × 60 + 30 s) is reached, and the wrapper now takes agy d
 
 ## Guard rails
 
-agy edits files on any call where it can write, so the wrapper refuses to run unless `--dir` - and
-every `--add-dir` - is a git repository with a clean working tree. That makes the outcome revertible
-with `git checkout .`. Commit before delegating.
+agy edits files on any call where it can write, so before such a call the wrapper snapshots
+`--dir` and every `--add-dir` into a shadow git repository under
+`%LOCALAPPDATA%\workers\snapshots` (kept 7 days). A tree over 20,000 files runs without a
+snapshot and a warning says so. Git is not required and a dirty tree does not matter; the
+snapshot is separate from the project's own history.
 
-`--force` skips that check - only on an explicit request from the user, never to get past the
-refusal on your own judgement.
+`--force` skips the snapshot - only on an explicit request from the user, never on your own
+judgement.
 
 `--dir` inside `.gemini`, `.claude`, `.ssh`, `.aws`, `.gnupg`, `.config`, `.docker`,
 `AppData/Roaming` or `AppData/Local/Microsoft`, or set to the home directory itself, is refused
@@ -255,14 +265,12 @@ is refused the same way, by `check_prompt_file_allowed`. Setting `AGY_ALLOWED_RO
 pins the binary; a value that is not a file stops the call instead of falling back to another
 build.
 
-Two things the wrapper prints, and both are worth reading:
-
-- **before the call**, the gitignored paths in each working directory. Those are outside the safety
-  net - agy can change them and `git checkout .` will not bring them back;
-- **after the call**, exactly which paths changed. Use it. agy has been observed answering "done."
-  to a write task while creating nothing, with status SUCCESS and exit 0 - so *nothing changed*
-  after a write task means the work did not happen, whatever the answer says. Giving absolute paths
-  in the brief avoids the case that was reproduced.
+After the call the wrapper prints exactly which paths changed against the snapshot, and the
+command that undoes them. Use it. agy has been observed answering "done." to a write task while
+creating nothing, with status SUCCESS and exit 0 - so *nothing changed* after a write task means
+the work did not happen, whatever the answer says. Giving absolute paths in the brief avoids the
+case that was reproduced. Files the directory's `.gitignore` excludes are outside the snapshot:
+agy can change them and the undo command will not bring them back.
 
 Never read, print, or copy `~/.gemini/oauth_creds.json`. It is the live Google session; handling it
 is how accounts get banned. Deny rules in agy's settings cover that file and its neighbours,
